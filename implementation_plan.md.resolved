@@ -1,0 +1,94 @@
+# Game UI Improvements — Implementation Plan
+
+## Issues to Fix
+
+1. **Bank & Merchant buttons are dead** — currently `// TODO` placeholders
+2. **No player profile display** — no name, country, credit score visible
+3. **Portrait mode** → **Force landscape** for better farm visibility
+4. **Plain background** → Dynamic sky gradient + weather visuals (clouds, sun, rain)
+
+---
+
+## Proposed Changes
+
+### 1. Force Landscape Orientation
+
+#### [MODIFY] [main.dart](file:///c:/Users/User/Desktop/Project/BorneoHack/mobile-games/lib/main.dart)
+
+Add `SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight])` in [main()](file:///c:/Users/User/Desktop/Project/BorneoHack/mobile-games/test/widget_test.dart#5-59) before `runApp`.
+
+---
+
+### 2. Dynamic Sky Background
+
+#### [NEW] [sky_painter.dart](file:///c:/Users/User/Desktop/Project/BorneoHack/mobile-games/lib/engine/sky_painter.dart)
+
+A `CustomPainter` that draws behind the farm grid:
+- **Day sky**: Blue gradient with animated clouds (white `drawRRect` shapes drifting)
+- **Sunset**: Orange/purple gradient (based on time of day)
+- **Rain**: Dark grey sky + rain particle overlay
+- **Storm**: Near-black sky + lightning flashes
+- **Drought**: Harsh yellow/orange tint + heat shimmer
+
+The sky will reflect the current weather state from `GameState.activeDisaster`.
+
+#### [MODIFY] [game_screen.dart](file:///c:/Users/User/Desktop/Project/BorneoHack/mobile-games/lib/screens/game_screen.dart)
+
+Stack `SkyPainter` behind the isometric grid `CustomPaint`.
+
+---
+
+### 3. Bank Screen
+
+#### [NEW] [bank_screen.dart](file:///c:/Users/User/Desktop/Project/BorneoHack/mobile-games/lib/screens/bank_screen.dart)
+
+Modal bottom sheet or full-screen overlay with tabs:
+- **Register Bank** — opens bank account (if not registered)
+- **Deposit/Withdraw** — transfer between cash ↔ bank
+- **Apply for Loan** — input amount + term, shows monthly payment preview, calls loan logic
+- **Buy Insurance** — select a farm plot, pay premium, get coverage
+- **Credit Score** — shows current score + factors
+
+---
+
+### 4. Merchant Screen (BNPL)
+
+#### [NEW] [merchant_screen.dart](file:///c:/Users/User/Desktop/Project/BorneoHack/mobile-games/lib/screens/merchant_screen.dart)
+
+Equipment shop with BNPL:
+- **Equipment catalog** (Tractor, Irrigation System, Greenhouse) with prices
+- **Buy with Cash** or **BNPL** (3 or 6 month installments)
+- Shows installment breakdown + warning about late fees
+- Active BNPL plans list with payment status
+
+---
+
+### 5. Player Profile in HUD
+
+#### [MODIFY] [hud_overlay.dart](file:///c:/Users/User/Desktop/Project/BorneoHack/mobile-games/lib/widgets/hud_overlay.dart)
+
+Add to the top bar:
+- Player name + country flag emoji
+- Bank registered status badge
+- Credit score indicator (color-coded: red/yellow/green)
+
+Rearrange layout for landscape (top bar spans full width, action buttons on right edge).
+
+---
+
+### 6. Wire HUD Buttons to Screens
+
+#### [MODIFY] [hud_overlay.dart](file:///c:/Users/User/Desktop/Project/BorneoHack/mobile-games/lib/widgets/hud_overlay.dart)
+
+Replace the `// TODO` in Bank and Merchant button `onPressed` with `Navigator.push` to the new screens.
+
+---
+
+## Verification
+
+1. `flutter analyze` — no issues
+2. Run on device in **landscape** mode
+3. Tap Bank button → Bank screen opens with loan/insurance options
+4. Tap Merchant button → Merchant screen opens with BNPL equipment
+5. Sky gradient visible behind grid, changes with disaster state
+6. Player name + credit score visible in HUD

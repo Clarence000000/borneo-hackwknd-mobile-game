@@ -1,0 +1,126 @@
+import 'package:flutter/material.dart';
+
+import 'package:farm_fintech/config/theme.dart';
+
+/// Reusable dialog popup for tutorial messages and financial advisor warnings.
+class DialogPopup extends StatelessWidget {
+  final String title;
+  final String message;
+  final String? buttonText;
+  final VoidCallback? onDismiss;
+  final IconData? icon;
+  final Color? iconColor;
+
+  const DialogPopup({
+    super.key,
+    required this.title,
+    required this.message,
+    this.buttonText = 'Got it!',
+    this.onDismiss,
+    this.icon,
+    this.iconColor,
+  });
+
+  /// Show as a modal bottom sheet.
+  static Future<void> show(
+    BuildContext context, {
+    required String title,
+    required String message,
+    String? buttonText,
+    IconData? icon,
+    Color? iconColor,
+  }) {
+    return showDialog(
+      context: context,
+      builder: (_) => Center(
+        child: DialogPopup(
+          title: title,
+          message: message,
+          buttonText: buttonText,
+          icon: icon,
+          iconColor: iconColor,
+          onDismiss: () => Navigator.pop(context),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        margin: const EdgeInsets.all(16),
+        constraints: BoxConstraints(
+          maxWidth: 420,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        decoration: BoxDecoration(
+          color: GameColors.uiPanel,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: GameColors.uiAccent),
+          boxShadow: [
+            BoxShadow(
+              color: GameColors.uiHighlight.withValues(alpha: 0.2),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, color: iconColor ?? GameColors.uiGold, size: 36),
+                const SizedBox(height: 10),
+              ],
+              Text(
+                title,
+                style: const TextStyle(
+                  color: GameColors.uiText,
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                style: const TextStyle(
+                  color: GameColors.uiTextDim,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: GameColors.uiHighlight,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: onDismiss,
+                  child: Text(
+                    buttonText ?? 'Got it!',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
