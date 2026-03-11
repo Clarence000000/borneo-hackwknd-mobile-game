@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:farm_fintech/firebase_options.dart';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/models/player.dart';
 import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/screens/game_screen.dart';
-import 'package:farm_fintech/widgets/dialog_popup.dart';
+import 'package:farm_fintech/screens/login_screen.dart';
+import 'package:farm_fintech/services/firestore_service.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Force landscape orientation
@@ -20,8 +25,13 @@ void main() {
   // Hide system UI for immersive game experience
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
-  // TODO: Initialize Firebase when configured
-  // await Firebase.initializeApp();
+  // Initialize Environment Variales
+  await dotenv.load(fileName: ".env.local");
+
+  // Initialize Firebase using custom configuration from env variables
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
   runApp(const FarmFintechApp());
 }
@@ -43,59 +53,55 @@ class FarmFintechApp extends StatelessWidget {
   }
 }
 
-/// Entry point that injects demo player and handles first-time tutorial.
-class _EntryPoint extends StatefulWidget {
+/// Entry point that checks authentication state to route to LoginScreen or GameScreen
+class _EntryPoint extends StatelessWidget {
   const _EntryPoint();
 
   @override
-  State<_EntryPoint> createState() => _EntryPointState();
-}
-
-class _EntryPointState extends State<_EntryPoint> {
-  @override
-  void initState() {
-    super.initState();
-
-    // Inject a demo player for now (Firebase Auth will replace this)
-    final state = context.read<GameState>();
-    state.player = Player(
-      uid: 'demo-user',
-      displayName: 'Demo Farmer',
-      country: 'MY',
-      currency: 'XMYR',
-    );
-
-    // Show tutorial on first login
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!(state.player?.tutorialCompleted ?? true)) {
-        _showTutorial();
-      }
-    });
-  }
-
-  void _showTutorial() {
-    DialogPopup.show(
-      context,
-      title: '🌾 Welcome to Farm FinTech!',
-      message:
-          'Welcome, farmer! Here\'s how to play:\n\n'
-          '1. TAP a brown farmland tile to plant crops\n'
-          '2. TAP "Next Day" ☀️ to advance time and grow crops\n'
-          '3. HARVEST mature crops to earn money\n'
-          '4. Visit the BANK for loans and insurance\n'
-          '5. Use the MERCHANT for BNPL equipment\n\n'
-          'Watch out for real-world weather disasters!',
-      icon: Icons.agriculture,
-      buttonText: 'Let\'s Farm! 🚜',
-    ).then((_) {
-      if (!mounted) return;
-      final state = context.read<GameState>();
-      state.player?.tutorialCompleted = true;
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return const GameScreen();
+    return StreamBuilder(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            backgroundColor: GameColors.uiBackground,
+            body: Center(child: CircularProgressIndicator(color: GameColors.uiGold)),
+          );
+        }
+
+        final user = snapshot.data;
+        if (user == null) {
+          return const LoginScreen();
+        }
+
+        // We have an authenticated user, but we need to fetch their profile 
+        // before launching the game since GameState depends on Player.
+        return FutureBuilder<Player?>(
+          future: FirestoreService().getPlayer(user.uid),
+          builder: (context, userSnapshot) {
+            if (userSnapshot.connectionState == ConnectionState.waiting) {
+               return const Scaffold(
+                 backgroundColor: GameColors.uiBackground,
+                 body: Center(child: CircularProgressIndicator(color: GameColors.uiGreen)),
+               );
+            }
+            
+            final player = userSnapshot.data;
+            if (player == null) {
+               // Logged in but no profile exists, probably an error state during registration, 
+               // so just show Login screen securely.
+               FirebaseAuth.instance.signOut();
+               return const LoginScreen();
+            }
+
+            // Set provider state and route to Game
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+               context.read<GameState>().player = player;
+            });
+            return const GameScreen();
+          },
+        );
+      },
+    );
   }
 }

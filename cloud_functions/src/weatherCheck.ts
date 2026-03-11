@@ -1,11 +1,15 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import fetch from "node-fetch";
+
+// Load local environment variables (safe fallback since firebase emulators inject differently)
+require("dotenv").config({ path: "../.env.local" });
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
 
 // OpenWeather API config
-const OPENWEATHER_API_KEY = process.env.OPENWEATHER_API_KEY || "YOUR_API_KEY";
+const OPENWEATHER_API_KEY = process.env.COOGLE_CLOUD_KEY || process.env.OPENWEATHER_API_KEY || "YOUR_API_KEY";
 const OPENWEATHER_URL = "https://api.openweathermap.org/data/2.5/weather";
 
 // Weather condition IDs that trigger disasters
@@ -41,7 +45,6 @@ export const weatherCheck = functions.https.onCall(
 
         try {
             // Fetch weather data
-            const fetch = (await import("node-fetch")).default;
             const url = `${OPENWEATHER_URL}?lat=${lat}&lon=${lng}&appid=${OPENWEATHER_API_KEY}&units=metric`;
             const response = await fetch(url);
             const data = (await response.json()) as WeatherResponse;

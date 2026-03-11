@@ -9,11 +9,17 @@ import 'package:farm_fintech/models/weather_event.dart';
 import 'package:farm_fintech/models/financial/bnpl_plan.dart';
 import 'package:farm_fintech/models/financial/loan.dart';
 import 'package:farm_fintech/models/financial/insurance.dart';
+import 'package:farm_fintech/services/cloud_functions_service.dart';
+import 'package:farm_fintech/services/firestore_service.dart';
+import 'package:farm_fintech/services/weather_service.dart';
 
 /// Central game state managed via [ChangeNotifier].
 class GameState extends ChangeNotifier {
   final IsometricEngine engine = const IsometricEngine();
   final GameCamera camera = GameCamera();
+  final CloudFunctionsService _cloud = CloudFunctionsService();
+  final WeatherService _weather = WeatherService();
+  final FirestoreService _firestore = FirestoreService();
 
   // ── Player ──────────────────────────────────────────────────
   Player? player;
@@ -131,8 +137,8 @@ class GameState extends ChangeNotifier {
     return revenue;
   }
 
-  /// Advance the game by one day. Grows crops, checks BNPL dues, etc.
-  void advanceDay() {
+  /// Advance the game by one day. Grows crops, checks BNPL dues via Cloud, etc.
+  Future<void> advanceDay() async {
     currentDay++;
 
     // Grow crops
@@ -165,6 +171,53 @@ class GameState extends ChangeNotifier {
     }
 
     notifyListeners();
+
+    // Fire-and-forget server checks
+    if (player != null) {
+      var needsRefresh = false;
+
+      // 1. Weather Check
+      final weatherResult = await _weather.checkWeather(player!.gpsLat, player!.gpsLng);
+      if (weatherResult.hasDisaster && weatherResult.disasterType != null) {
+        DisasterType type = DisasterType.none;
+        // The Cloud Function returns string IDs like 'flood', 'storm', 'drought'
+        if (weatherResult.disasterType == 'flood') type = DisasterType.flood;
+        if (weatherResult.disasterType == 'storm') type = DisasterType.storm;
+        if (weatherResult.disasterType == 'drought') type = DisasterType.drought;
+        triggerDisaster(type);
+      } else {
+        clearDisaster();
+      }
+
+      // 2. BNPL Auto-payment / Penalty check
+      for (final plan in bnplPlans) {
+        if (plan.status == 'active') {
+          final result = await _cloud.calculateBnplPenalty(plan.id);
+          // If a penalty was applied or defaulted, it modified the user wallet in Firestore
+          if (result['penalty'] != null && result['penalty'] > 0) {
+             needsRefresh = true;
+          }
+        }
+      }
+
+      // If the server altered our wallet, fetch fresh state
+      if (needsRefresh) {
+        final updatedUser = await _firestore.getPlayer(player!.uid);
+        if (updatedUser != null) {
+          player = updatedUser;
+          notifyListeners();
+        }
+      }
+
+      // 3. Weekly Credit Score recalc
+      if (currentDay % 7 == 0) {
+        final creditResult = await _cloud.calculateCreditScore();
+        if (creditResult['score'] != null) {
+          player!.creditScore = creditResult['score'] as int;
+          notifyListeners();
+        }
+      }
+    }
   }
 
   /// Trigger a disaster event — destroy uninsured crops.

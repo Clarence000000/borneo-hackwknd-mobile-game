@@ -1,9 +1,58 @@
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter/foundation.dart';
+
 /// Generic Cloud Functions caller service.
-///
-/// TODO: Implement when Firebase is configured.
 class CloudFunctionsService {
-  // Future<Map<String, dynamic>> calculateCreditScore(String uid) async { ... }
-  // Future<Map<String, dynamic>> evaluateLoan(String uid, double amount) async { ... }
-  // Future<Map<String, dynamic>> calculateBnplPenalty(String planId) async { ... }
-  // Future<Map<String, dynamic>> processInsurancePayout(String uid, String eventId) async { ... }
+  final FirebaseFunctions _functions = FirebaseFunctions.instance;
+
+  /// Evaluate if the player qualifies for a loan based on their credit score
+  Future<Map<String, dynamic>> evaluateLoan(double amount, int termMonths) async {
+    try {
+      final callable = _functions.httpsCallable('evaluateLoan');
+      final result = await callable.call({
+        'amount': amount,
+        'termMonths': termMonths,
+      });
+      return Map<String, dynamic>.from(result.data);
+    } catch (e) {
+      debugPrint('Error calling evaluateLoan: $e');
+      return {'approved': false, 'reason': 'Server error: $e'};
+    }
+  }
+
+  /// Calculate penalty for an overdue BNPL plan
+  Future<Map<String, dynamic>> calculateBnplPenalty(String planId) async {
+    try {
+      final callable = _functions.httpsCallable('calculateBnplPenalty');
+      final result = await callable.call({'planId': planId});
+      return Map<String, dynamic>.from(result.data);
+    } catch (e) {
+      debugPrint('Error calling calculateBnplPenalty: $e');
+      return {'penalty': 0, 'error': e.toString()};
+    }
+  }
+
+  /// Request the server to check the weather at the given coordinates
+  Future<Map<String, dynamic>> checkWeather(double lat, double lng) async {
+    try {
+      final callable = _functions.httpsCallable('weatherCheck');
+      final result = await callable.call({'lat': lat, 'lng': lng});
+      return Map<String, dynamic>.from(result.data);
+    } catch (e) {
+      debugPrint('Error calling weatherCheck: $e');
+      return {'hasDisaster': false};
+    }
+  }
+
+  /// Recalculate credit score based on historical bank transactions
+  Future<Map<String, dynamic>> calculateCreditScore() async {
+    try {
+      final callable = _functions.httpsCallable('calculateCreditScore');
+      final result = await callable.call();
+      return Map<String, dynamic>.from(result.data);
+    } catch (e) {
+      debugPrint('Error calling calculateCreditScore: $e');
+      return {'score': 400};
+    }
+  }
 }

@@ -6,6 +6,7 @@ import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/models/financial/bnpl_plan.dart';
 import 'package:farm_fintech/models/player.dart';
 import 'package:farm_fintech/providers/game_state.dart';
+import 'package:farm_fintech/services/firestore_service.dart';
 import 'package:farm_fintech/widgets/dialog_popup.dart';
 import 'package:farm_fintech/widgets/financial_advisor.dart';
 
@@ -270,13 +271,13 @@ class _EquipmentCard extends StatelessWidget {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       onPressed: () async {
-                        await FinancialAdvisor.warnBnpl(context, state.bnplPlans.length);
+                        await FinancialAdvisor.warnBnpl(context, player, state.bnplPlans.length);
                         if (!context.mounted) return;
 
                         // Create BNPL plan
-                        state.bnplPlans.add(
-                          __createBnplPlan(equipment.name, equipment.price, months),
-                        );
+                        final plan = __createBnplPlan(equipment.name, equipment.price, months);
+                        await FirestoreService().createBnplPlan(player.uid, plan);
+                        state.bnplPlans.add(plan);
                         state.refresh();
 
                         if (!context.mounted) return;

@@ -7,6 +7,8 @@ import 'package:farm_fintech/engine/game_painter.dart';
 import 'package:farm_fintech/engine/sky_painter.dart';
 import 'package:farm_fintech/models/tile.dart';
 import 'package:farm_fintech/providers/game_state.dart';
+import 'package:farm_fintech/services/firestore_service.dart';
+import 'package:farm_fintech/widgets/dialog_popup.dart';
 import 'package:farm_fintech/widgets/hud_overlay.dart';
 
 /// Main game screen — landscape isometric farm view.
@@ -38,6 +40,33 @@ class _GameScreenState extends State<GameScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final state = context.read<GameState>();
       state.centerCamera(MediaQuery.of(context).size);
+      
+      if (!(state.player?.tutorialCompleted ?? true)) {
+        _showTutorial(state);
+      }
+    });
+  }
+
+  void _showTutorial(GameState state) {
+    DialogPopup.show(
+      context,
+      title: '🌾 Welcome to Farm FinTech!',
+      message:
+          'Welcome, farmer! Here\'s how to play:\n\n'
+          '1. TAP a brown farmland tile to plant crops\n'
+          '2. TAP "Next Day" ☀️ to advance time and grow crops\n'
+          '3. HARVEST mature crops to earn money\n'
+          '4. Visit the BANK for loans and insurance\n'
+          '5. Use the MERCHANT for BNPL equipment\n\n'
+          'Watch out for real-world weather disasters!',
+      icon: Icons.agriculture,
+      buttonText: 'Let\'s Farm! 🚜',
+    ).then((_) {
+      if (!mounted) return;
+      state.player?.tutorialCompleted = true;
+      if (state.player != null) {
+        FirestoreService().savePlayer(state.player!);
+      }
     });
   }
 

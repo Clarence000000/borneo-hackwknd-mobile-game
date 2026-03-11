@@ -5,6 +5,8 @@ import 'package:farm_fintech/config/constants.dart';
 import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/models/player.dart';
 import 'package:farm_fintech/providers/game_state.dart';
+import 'package:farm_fintech/services/cloud_functions_service.dart';
+import 'package:farm_fintech/services/firestore_service.dart';
 import 'package:farm_fintech/widgets/dialog_popup.dart';
 import 'package:farm_fintech/widgets/financial_advisor.dart';
 
@@ -75,6 +77,7 @@ class BankScreen extends StatelessWidget {
                               ? () {
                                   player.pay(100, method: PaymentMethod.cash);
                                   player.deposit(100, method: PaymentMethod.bank);
+                                  FirestoreService().logTransaction(player.uid, amount: 100, paymentType: 'bank', category: 'deposit');
                                   state.refresh();
                                 }
                               : null,
@@ -90,6 +93,7 @@ class BankScreen extends StatelessWidget {
                               ? () {
                                   player.pay(100, method: PaymentMethod.bank);
                                   player.deposit(100, method: PaymentMethod.cash);
+                                  FirestoreService().logTransaction(player.uid, amount: 100, paymentType: 'bank', category: 'withdrawal');
                                   state.refresh();
                                 }
                               : null,
@@ -114,24 +118,35 @@ class BankScreen extends StatelessWidget {
                         : GameColors.uiTextDim,
                     onPressed: player.creditScore >= kMinLoanCreditScore
                         ? () async {
-                            await FinancialAdvisor.warnLoan(context, 500 * (1 + kLoanInterestRate) / 6, 300);
+                            await FinancialAdvisor.warnLoan(context, player, 500 * (1 + kLoanInterestRate) / 6, 300);
                             if (!context.mounted) return;
 
-                            // Simple loan: $500, 6 months, 5% monthly interest
-                            final monthlyPayment = 500 * (1 + kLoanInterestRate) / 6;
-                            player.deposit(500, method: PaymentMethod.bank);
-                            state.refresh();
-
+                            // Call Cloud Function to evaluate loan (this modifies Firestore if approved)
+                            final result = await CloudFunctionsService().evaluateLoan(500.0, 6);
                             if (!context.mounted) return;
-                            DialogPopup.show(context,
-                              title: '✅ Loan Approved!',
-                              message: '\$500 deposited to your bank.\n\n'
-                                  'Monthly payment: \$${monthlyPayment.toStringAsFixed(2)}\n'
-                                  'Total repayment: \$${(monthlyPayment * 6).toStringAsFixed(2)}\n'
-                                  'Duration: 6 months',
-                              icon: Icons.check_circle,
-                              iconColor: GameColors.uiGreen,
-                            );
+                            
+                            if (result['approved'] == true) {
+                                // Refresh player from Firestore to get updated balances
+                                final updatedPlayer = await FirestoreService().getPlayer(player.uid);
+                                if (updatedPlayer != null) {
+                                  state.player = updatedPlayer;
+                                }
+                                state.refresh();
+
+                                DialogPopup.show(context,
+                                  title: '✅ Loan Approved!',
+                                  message: result['message'] ?? '\$500 deposited to your bank.',
+                                  icon: Icons.check_circle,
+                                  iconColor: GameColors.uiGreen,
+                                );
+                            } else {
+                                DialogPopup.show(context,
+                                  title: '❌ Loan Denied',
+                                  message: result['reason'] ?? 'Your credit score is too low.',
+                                  icon: Icons.cancel,
+                                  iconColor: GameColors.uiRed,
+                                );
+                            }
                           }
                         : null,
                   ),
@@ -170,8 +185,10 @@ class BankScreen extends StatelessWidget {
                             // Deduct premium
                             if (player.bankBalance >= 50) {
                               player.pay(50, method: PaymentMethod.bank);
+                              FirestoreService().logTransaction(player.uid, amount: 50, paymentType: 'bank', category: 'insurancePremium');
                             } else {
                               player.pay(50, method: PaymentMethod.cash);
+                              FirestoreService().logTransaction(player.uid, amount: 50, paymentType: 'cash', category: 'insurancePremium');
                             }
                             state.refresh();
 

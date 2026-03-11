@@ -5,6 +5,7 @@ import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/screens/bank_screen.dart';
 import 'package:farm_fintech/screens/merchant_screen.dart';
+import 'package:farm_fintech/screens/leaderboard_screen.dart';
 
 /// Country flag emoji lookup
 const _countryFlags = {
@@ -142,6 +143,20 @@ class HudOverlay extends StatelessWidget {
                             context,
                             MaterialPageRoute(
                               builder: (_) => const MerchantScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 6),
+                      _HudActionButton(
+                        icon: Icons.leaderboard,
+                        tooltip: 'Leaderboard',
+                        color: Colors.amber,
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => LeaderboardScreen(player: player),
                             ),
                           );
                         },
