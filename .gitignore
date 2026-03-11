@@ -45,6 +45,4 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# AI/Project specific
-skills-lock.json
 
