@@ -7,6 +7,7 @@ import 'package:farm_fintech/models/player.dart';
 import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/services/cloud_functions_service.dart';
 import 'package:farm_fintech/services/firestore_service.dart';
+import 'package:farm_fintech/utils/currency_util.dart';
 import 'package:farm_fintech/widgets/dialog_popup.dart';
 import 'package:farm_fintech/widgets/financial_advisor.dart';
 
@@ -70,7 +71,7 @@ class BankScreen extends StatelessWidget {
                     children: [
                       Expanded(
                         child: _QuickActionButton(
-                          label: 'Deposit \$100',
+                          label: 'Deposit ${CurrencyUtil.format(100, player.country)}',
                           icon: Icons.arrow_downward,
                           color: GameColors.uiGreen,
                           onPressed: player.cashBalance >= 100
@@ -86,7 +87,7 @@ class BankScreen extends StatelessWidget {
                       const SizedBox(width: 8),
                       Expanded(
                         child: _QuickActionButton(
-                          label: 'Withdraw \$100',
+                          label: 'Withdraw ${CurrencyUtil.format(100, player.country)}',
                           icon: Icons.arrow_upward,
                           color: GameColors.uiHighlight,
                           onPressed: player.bankBalance >= 100
@@ -107,11 +108,11 @@ class BankScreen extends StatelessWidget {
                   _ActionCard(
                     icon: Icons.real_estate_agent,
                     title: 'Apply for Land Loan',
-                    subtitle: 'Borrow \$500 to buy more farmland.\n'
+                    subtitle: 'Borrow ${CurrencyUtil.format(500, player.country)} to buy more farmland.\n'
                         'Interest: ${(kLoanInterestRate * 100).toStringAsFixed(0)}% monthly | '
                         'Min credit score: $kMinLoanCreditScore',
                     buttonText: player.creditScore >= kMinLoanCreditScore
-                        ? 'Apply for \$500 Loan'
+                        ? 'Apply for ${CurrencyUtil.format(500, player.country)} Loan'
                         : 'Score too low (${player.creditScore}/$kMinLoanCreditScore)',
                     buttonColor: player.creditScore >= kMinLoanCreditScore
                         ? GameColors.uiGold
@@ -133,9 +134,10 @@ class BankScreen extends StatelessWidget {
                                 }
                                 state.refresh();
 
+                                if (!context.mounted) return;
                                 DialogPopup.show(context,
                                   title: '✅ Loan Approved!',
-                                  message: result['message'] ?? '\$500 deposited to your bank.',
+                                  message: result['message'] ?? '${CurrencyUtil.format(500, player.country)} deposited to your bank.',
                                   icon: Icons.check_circle,
                                   iconColor: GameColors.uiGreen,
                                 );
@@ -158,7 +160,7 @@ class BankScreen extends StatelessWidget {
                     title: 'Crop Insurance',
                     subtitle: 'Protect your crops against natural disasters.\n'
                         'Premium: ${(kInsurancePremiumRate * 100).toStringAsFixed(0)}% of coverage value.',
-                    buttonText: 'Buy Insurance (\$50)',
+                    buttonText: 'Buy Insurance (${CurrencyUtil.format(50, player.country)})',
                     buttonColor: GameColors.uiAccent,
                     onPressed: (player.cashBalance >= 50 || player.bankBalance >= 50)
                         ? () {
@@ -301,7 +303,7 @@ class _BalanceCard extends StatelessWidget {
               const Icon(Icons.money, color: GameColors.uiGold, size: 28),
               const SizedBox(height: 4),
               Text('Cash', style: TextStyle(color: GameColors.uiTextDim, fontSize: 12)),
-              Text('\$${player.cashBalance.toStringAsFixed(0)}',
+              Text(CurrencyUtil.format(player.cashBalance, player.country),
                   style: const TextStyle(color: GameColors.uiGold, fontWeight: FontWeight.bold, fontSize: 18)),
             ],
           ),
@@ -311,7 +313,7 @@ class _BalanceCard extends StatelessWidget {
               const Icon(Icons.account_balance, color: GameColors.uiGreen, size: 28),
               const SizedBox(height: 4),
               Text('Bank', style: TextStyle(color: GameColors.uiTextDim, fontSize: 12)),
-              Text('\$${player.bankBalance.toStringAsFixed(0)}',
+              Text(CurrencyUtil.format(player.bankBalance, player.country),
                   style: const TextStyle(color: GameColors.uiGreen, fontWeight: FontWeight.bold, fontSize: 18)),
             ],
           ),

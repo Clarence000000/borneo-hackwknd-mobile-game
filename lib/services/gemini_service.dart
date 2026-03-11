@@ -1,6 +1,7 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:farm_fintech/models/player.dart';
+import 'package:farm_fintech/utils/currency_util.dart';
 
 /// Service to handle AI coaching via Gemini API.
 class GeminiService {
@@ -28,8 +29,8 @@ class GeminiService {
 You are a snarky but helpful financial advisor in an ASEAN farming simulator game. 
 The player's name is ${player.displayName}. They are from ${player.country}.
 Their credit score is ${player.creditScore} (range 300-850).
-Their cash balance is \$${player.cashBalance.toStringAsFixed(0)}.
-Their bank balance is \$${player.bankBalance.toStringAsFixed(0)}.
+Their cash balance is ${CurrencyUtil.format(player.cashBalance, player.country)}.
+Their bank balance is ${CurrencyUtil.format(player.bankBalance, player.country)}.
 
 The player just asked about: "$topic"
 

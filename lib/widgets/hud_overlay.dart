@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/screens/bank_screen.dart';
+import 'package:farm_fintech/screens/profile_screen.dart';
 import 'package:farm_fintech/screens/merchant_screen.dart';
 import 'package:farm_fintech/screens/leaderboard_screen.dart';
+import 'package:farm_fintech/utils/currency_util.dart';
 
 /// Country flag emoji lookup
 const _countryFlags = {
@@ -46,29 +48,39 @@ class HudOverlay extends StatelessWidget {
                 Row(
                   children: [
                     // Player profile chip
-                    _HudChip(
-                      children: [
-                        Text(
-                          _countryFlags[player.country] ?? '🌏',
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          player.displayName,
-                          style: const TextStyle(
-                            color: GameColors.uiText,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ProfileScreen(),
                           ),
-                        ),
-                      ],
+                        );
+                      },
+                      child: _HudChip(
+                        children: [
+                          Text(
+                            _countryFlags[player.country] ?? '🌏',
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            player.displayName,
+                            style: const TextStyle(
+                              color: GameColors.uiText,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(width: 6),
 
                     // Cash badge
                     _HudBadge(
                       icon: Icons.monetization_on,
-                      label: '\$${player.cashBalance.toStringAsFixed(0)}',
+                      label: CurrencyUtil.format(player.cashBalance, player.country),
                       color: GameColors.uiGold,
                     ),
                     const SizedBox(width: 6),
@@ -77,7 +89,7 @@ class HudOverlay extends StatelessWidget {
                     if (player.bankRegistered) ...[
                       _HudBadge(
                         icon: Icons.account_balance,
-                        label: '\$${player.bankBalance.toStringAsFixed(0)}',
+                        label: CurrencyUtil.format(player.bankBalance, player.country),
                         color: GameColors.uiGreen,
                       ),
                       const SizedBox(width: 6),

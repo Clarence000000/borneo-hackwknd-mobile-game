@@ -191,7 +191,7 @@ class GameState extends ChangeNotifier {
 
       // 2. BNPL Auto-payment / Penalty check
       for (final plan in bnplPlans) {
-        if (plan.status == 'active') {
+        if (plan.status == BnplStatus.active) {
           final result = await _cloud.calculateBnplPenalty(plan.id);
           // If a penalty was applied or defaulted, it modified the user wallet in Firestore
           if (result['penalty'] != null && result['penalty'] > 0) {

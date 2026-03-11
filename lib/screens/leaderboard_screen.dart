@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/models/player.dart';
+import 'package:farm_fintech/utils/currency_util.dart';
 
 class LeaderboardScreen extends StatelessWidget {
   final Player player;
@@ -65,7 +66,7 @@ class LeaderboardScreen extends StatelessWidget {
                   title: Text(data['displayName'] ?? 'Unknown Farmer', 
                       style: TextStyle(color: GameColors.uiText, fontWeight: isMe ? FontWeight.bold : FontWeight.normal)),
                   subtitle: isMe ? const Text('You', style: TextStyle(color: GameColors.uiHighlight, fontSize: 12)) : null,
-                  trailing: Text('\$${(data["netWorth"] as num?)?.toStringAsFixed(0) ?? "0"}', 
+                  trailing: Text(CurrencyUtil.format((data["netWorth"] as num?)?.toDouble() ?? 0.0, player.country), 
                       style: const TextStyle(color: GameColors.uiGold, fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
               );

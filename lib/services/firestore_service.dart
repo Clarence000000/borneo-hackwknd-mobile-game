@@ -12,6 +12,8 @@ class FirestoreService {
   /// but for this simple app, instantiating it is fine.
   FirestoreService();
 
+  FirebaseFirestore getDb() => _db;
+
   /// Creates a new player profile in Firestore after registration
   Future<void> createPlayer(Player player) async {
     await _db.collection('users').doc(player.uid).set(player.toMap());

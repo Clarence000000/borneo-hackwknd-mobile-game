@@ -10,6 +10,7 @@ import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/services/firestore_service.dart';
 import 'package:farm_fintech/widgets/dialog_popup.dart';
 import 'package:farm_fintech/widgets/hud_overlay.dart';
+import 'package:farm_fintech/utils/currency_util.dart';
 
 /// Main game screen — landscape isometric farm view.
 ///
@@ -233,7 +234,7 @@ class _GameScreenState extends State<GameScreen>
         padding: const EdgeInsets.only(right: 6),
         child: ActionChip(
           avatar: const Icon(Icons.grass, size: 14, color: GameColors.uiGreen),
-          label: Text('${config['name']} \$${(config['seedCost'] as double).toStringAsFixed(0)}',
+          label: Text('${config['name']} ${CurrencyUtil.format(config['seedCost'] as double, state.player?.country ?? 'MY')}',
               style: const TextStyle(fontSize: 11)),
           backgroundColor: GameColors.uiAccent,
           labelStyle: const TextStyle(color: GameColors.uiText),
@@ -263,7 +264,7 @@ class _GameScreenState extends State<GameScreen>
         final revenue = state.harvestCrop();
         if (revenue != null && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Harvested! +\$${revenue.toStringAsFixed(0)}')),
+            SnackBar(content: Text('Harvested! +${CurrencyUtil.format(revenue, state.player?.country ?? 'MY')}')),
           );
         }
       },

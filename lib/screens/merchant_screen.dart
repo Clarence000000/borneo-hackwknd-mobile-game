@@ -9,6 +9,7 @@ import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/services/firestore_service.dart';
 import 'package:farm_fintech/widgets/dialog_popup.dart';
 import 'package:farm_fintech/widgets/financial_advisor.dart';
+import 'package:farm_fintech/utils/currency_util.dart';
 
 /// Equipment data for the merchant shop.
 class _Equipment {
@@ -87,9 +88,9 @@ class MerchantScreen extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _BalanceBadge(label: 'Cash', value: player.cashBalance, color: GameColors.uiGold),
+                      _BalanceBadge(label: 'Cash', value: player.cashBalance, color: GameColors.uiGold, countryCode: player.country),
                       if (player.bankRegistered)
-                        _BalanceBadge(label: 'Bank', value: player.bankBalance, color: GameColors.uiGreen),
+                        _BalanceBadge(label: 'Bank', value: player.bankBalance, color: GameColors.uiGreen, countryCode: player.country),
                     ],
                   ),
                 ),
@@ -124,10 +125,10 @@ class MerchantScreen extends StatelessWidget {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                Text('\$${plan.monthlyAmount.toStringAsFixed(0)}/mo',
+                                Text('${CurrencyUtil.format(plan.monthlyAmount, player.country)}/mo',
                                     style: const TextStyle(color: GameColors.uiGold, fontWeight: FontWeight.bold)),
                                 if (plan.lateFees > 0)
-                                  Text('Late fees: \$${plan.lateFees.toStringAsFixed(0)}',
+                                  Text('Late fees: ${CurrencyUtil.format(plan.lateFees, player.country)}',
                                       style: const TextStyle(color: GameColors.uiRed, fontSize: 11)),
                               ],
                             ),
@@ -159,14 +160,15 @@ class _BalanceBadge extends StatelessWidget {
   final String label;
   final double value;
   final Color color;
-  const _BalanceBadge({required this.label, required this.value, required this.color});
+  final String countryCode;
+  const _BalanceBadge({required this.label, required this.value, required this.color, required this.countryCode});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         Text(label, style: TextStyle(color: GameColors.uiTextDim, fontSize: 12)),
-        Text('\$${value.toStringAsFixed(0)}', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 20)),
+        Text(CurrencyUtil.format(value, countryCode), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 20)),
       ],
     );
   }
@@ -221,7 +223,7 @@ class _EquipmentCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Text('\$${equipment.price.toStringAsFixed(0)}',
+              Text(CurrencyUtil.format(equipment.price, player.country),
                   style: const TextStyle(color: GameColors.uiGold, fontWeight: FontWeight.bold, fontSize: 18)),
             ],
           ),
@@ -247,7 +249,7 @@ class _EquipmentCard extends StatelessWidget {
                           state.refresh();
                           DialogPopup.show(context,
                             title: '✅ Purchased!',
-                            message: '${equipment.name} bought for \$${equipment.price.toStringAsFixed(0)}.',
+                            message: '${equipment.name} bought for ${CurrencyUtil.format(equipment.price, player.country)}.',
                             icon: Icons.check_circle,
                             iconColor: GameColors.uiGreen,
                           );
@@ -284,15 +286,15 @@ class _EquipmentCard extends StatelessWidget {
                         DialogPopup.show(context,
                           title: '📦 BNPL Activated!',
                           message: '${equipment.name} acquired on ${months}x installments.\n\n'
-                              'Monthly payment: \$${monthly.toStringAsFixed(2)}\n\n'
+                              'Monthly payment: ${CurrencyUtil.format(monthly, player.country, decimals: 2)}\n\n'
                               '⚠️ Late payments will incur:\n'
-                              '• RM${kBnplAdminFee.toStringAsFixed(0)} admin fee\n'
-                              '• RM${kBnplLateFee.toStringAsFixed(0)} late fee',
+                              '• ${CurrencyUtil.format(kBnplAdminFee, player.country)} admin fee\n'
+                              '• ${CurrencyUtil.format(kBnplLateFee, player.country)} late fee',
                           icon: Icons.credit_card,
                           iconColor: GameColors.uiHighlight,
                         );
                       },
-                      child: Text('${months}x\n\$${monthly.toStringAsFixed(0)}/mo',
+                      child: Text('${months}x\n${CurrencyUtil.format(monthly, player.country)}/mo',
                           textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, height: 1.3)),
                     ),
                   ),
