@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -43,12 +44,213 @@ class GameState extends ChangeNotifier {
 
   // ── Game Day ────────────────────────────────────────────────
   int currentDay = 1;
+  int _remainingCycleSeconds = kGameDayDurationMinutes * 60;
+  int _manualNextDayUsedToday = 0;
+  DateTime _manualNextDayUsageDate = DateTime.now();
+  Timer? _dayCycleTimer;
+  Timer? _loanSharkThreatTimer;
+  bool _isAdvancingDay = false;
+  int _loanSharkThreatSecondsRemaining = 0;
+  final Map<String, double> _monthlyExpenses = {
+    'seed': 0,
+    'interest': 0,
+    'insurance': 0,
+    'equipment': 0,
+    'nextDayFee': 0,
+  };
+  double _monthlyIncome = 0;
+  MonthlyPnLReport? _pendingMonthlyReport;
 
   // ── Crop selection for planting ─────────────────────────────
   CropType? selectedCropToPlant;
 
   GameState() {
     _initGrid();
+    _startDayCycleClock();
+  }
+
+  int get remainingCycleSeconds => _remainingCycleSeconds;
+  bool get isDaytime => _remainingCycleSeconds > (kGameNightMinutes * 60);
+  String get dayPhaseLabel => isDaytime ? 'Day' : 'Night';
+  int get currentYear {
+    final zeroBasedDay = (currentDay - 1).clamp(0, 1 << 30);
+    final daysPerYear = kGameDaysPerMonth * kGameMonthsPerYear;
+    return (zeroBasedDay ~/ daysPerYear) + 1;
+  }
+
+  int get currentMonth {
+    final zeroBasedDay = (currentDay - 1).clamp(0, 1 << 30);
+    final daysPerYear = kGameDaysPerMonth * kGameMonthsPerYear;
+    final dayWithinYear = zeroBasedDay % daysPerYear;
+    return (dayWithinYear ~/ kGameDaysPerMonth) + 1;
+  }
+
+  int get currentDayOfMonth {
+    final zeroBasedDay = (currentDay - 1).clamp(0, 1 << 30);
+    return (zeroBasedDay % kGameDaysPerMonth) + 1;
+  }
+
+  String get gameDateLabel =>
+      'Y$currentYear M$currentMonth D$currentDayOfMonth';
+  MonthlyPnLReport? get pendingMonthlyReport => _pendingMonthlyReport;
+  bool get loanSharkThreatActive => _loanSharkThreatSecondsRemaining > 0;
+  bool get tractorOwned => player?.tractorOwned ?? false;
+  bool get autoHarvestEnabled => player?.autoHarvestEnabled ?? false;
+  int get fertilizerPackCount => player?.fertilizerPackCount ?? 0;
+
+  int get freeNextDayRemaining {
+    _resetManualNextDayIfNewDate();
+    return (kFreeManualNextDayPerRealDay - _manualNextDayUsedToday).clamp(
+      0,
+      kFreeManualNextDayPerRealDay,
+    );
+  }
+
+  void _startDayCycleClock() {
+    _dayCycleTimer?.cancel();
+    _dayCycleTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      if (_isAdvancingDay) return;
+      _remainingCycleSeconds--;
+      if (_remainingCycleSeconds <= 0) {
+        await _advanceDayCore(isManual: false);
+        _remainingCycleSeconds = kGameDayDurationMinutes * 60;
+      }
+      notifyListeners();
+    });
+  }
+
+  void _resetManualNextDayIfNewDate() {
+    final nowDate = DateUtils.dateOnly(DateTime.now());
+    final storedDate = DateUtils.dateOnly(_manualNextDayUsageDate);
+    if (nowDate != storedDate) {
+      _manualNextDayUsageDate = nowDate;
+      _manualNextDayUsedToday = 0;
+    }
+  }
+
+  bool _tryChargeManualNextDayFee() {
+    if (player == null) return false;
+    if (_manualNextDayUsedToday < kFreeManualNextDayPerRealDay) {
+      _manualNextDayUsedToday++;
+      return true;
+    }
+
+    final canPayCash = player!.cashBalance >= kManualNextDayCost;
+    final canPayBank = player!.bankBalance >= kManualNextDayCost;
+    if (!canPayCash && !canPayBank) return false;
+
+    if (canPayCash) {
+      player!.pay(kManualNextDayCost, method: PaymentMethod.cash);
+    } else {
+      player!.pay(kManualNextDayCost, method: PaymentMethod.bank);
+    }
+    _addMonthlyExpense('nextDayFee', kManualNextDayCost);
+    _manualNextDayUsedToday++;
+    return true;
+  }
+
+  void _addMonthlyExpense(String category, double amount) {
+    _monthlyExpenses[category] = (_monthlyExpenses[category] ?? 0) + amount;
+  }
+
+  void _addMonthlyIncome(double amount) {
+    _monthlyIncome += amount;
+  }
+
+  void _startLoanSharkThreat({int seconds = 8}) {
+    _loanSharkThreatSecondsRemaining = seconds;
+    _loanSharkThreatTimer?.cancel();
+    _loanSharkThreatTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _loanSharkThreatSecondsRemaining--;
+      if (_loanSharkThreatSecondsRemaining <= 0) {
+        _loanSharkThreatSecondsRemaining = 0;
+        timer.cancel();
+      }
+      notifyListeners();
+    });
+    notifyListeners();
+  }
+
+  Future<bool> takeLoanSharkLoan(double amount) async {
+    if (player == null || amount <= 0) return false;
+
+    final highInterestRate = 0.35; // 35% monthly (predatory)
+    const termMonths = 3;
+    final totalRepayment = amount * (1 + highInterestRate * termMonths);
+    final monthlyPayment = totalRepayment / termMonths;
+
+    final loan = Loan(
+      id: 'shark-${DateTime.now().millisecondsSinceEpoch}',
+      principal: amount,
+      interestRate: highInterestRate,
+      monthlyPayment: monthlyPayment,
+      remainingBalance: totalRepayment,
+    );
+
+    loans.add(loan);
+    player!.deposit(amount, method: PaymentMethod.cash);
+    _startLoanSharkThreat();
+
+    try {
+      await _savePlayerState();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      loans.removeWhere((l) => l.id == loan.id);
+      player!.pay(amount, method: PaymentMethod.cash);
+      return false;
+    }
+  }
+
+  void _processLoanSharkRepaymentsOnMonthEnd() {
+    if (player == null) return;
+
+    for (final loan in loans) {
+      if (loan.status != LoanStatus.active || !loan.id.startsWith('shark-')) {
+        continue;
+      }
+
+      final due = loan.monthlyPayment
+          .clamp(0, loan.remainingBalance)
+          .toDouble();
+      if (due <= 0) {
+        loan.status = LoanStatus.paid;
+        continue;
+      }
+
+      var paid = false;
+      if (player!.cashBalance >= due) {
+        player!.pay(due, method: PaymentMethod.cash);
+        paid = true;
+      } else if (player!.bankBalance >= due) {
+        player!.pay(due, method: PaymentMethod.bank);
+        paid = true;
+      }
+
+      if (paid) {
+        loan.remainingBalance -= due;
+        _addMonthlyExpense('interest', due);
+        if (loan.remainingBalance <= 0.01) {
+          loan.remainingBalance = 0;
+          loan.status = LoanStatus.paid;
+        }
+      } else {
+        final intimidationPenalty = (due * 0.25).toDouble();
+        loan.remainingBalance += intimidationPenalty;
+        _addMonthlyExpense('interest', intimidationPenalty);
+        _startLoanSharkThreat(seconds: 12);
+      }
+    }
+  }
+
+  void recordInsuranceExpense(double amount) {
+    _addMonthlyExpense('insurance', amount);
+    notifyListeners();
+  }
+
+  void acknowledgeMonthlyReport() {
+    _pendingMonthlyReport = null;
+    notifyListeners();
   }
 
   void _initGrid() {
@@ -124,6 +326,7 @@ class GameState extends ChangeNotifier {
     } else {
       player!.pay(cost, method: PaymentMethod.bank);
     }
+    _addMonthlyExpense('seed', cost);
 
     try {
       await _savePlayerState();
@@ -135,6 +338,7 @@ class GameState extends ChangeNotifier {
       tile.plantedAt = null;
       player!.cashBalance = previousCashBalance;
       player!.bankBalance = previousBankBalance;
+      _addMonthlyExpense('seed', -cost);
       return false;
     }
   }
@@ -200,6 +404,7 @@ class GameState extends ChangeNotifier {
     final previousCashBalance = player!.cashBalance;
 
     player!.deposit(revenue, method: PaymentMethod.cash);
+    _addMonthlyIncome(revenue);
     final remainingQty = availableQty - qty;
     if (remainingQty > 0) {
       player!.inventory[cropKey] = remainingQty;
@@ -214,6 +419,7 @@ class GameState extends ChangeNotifier {
     } catch (_) {
       player!.cashBalance = previousCashBalance;
       player!.inventory[cropKey] = availableQty;
+      _addMonthlyIncome(-revenue);
       return null;
     }
   }
@@ -225,6 +431,7 @@ class GameState extends ChangeNotifier {
     final previousBankBalance = player!.bankBalance;
     final didPay = player!.pay(amount, method: method);
     if (!didPay) return false;
+    _addMonthlyExpense('equipment', amount);
 
     try {
       await _savePlayerState();
@@ -233,109 +440,342 @@ class GameState extends ChangeNotifier {
     } catch (_) {
       player!.cashBalance = previousCashBalance;
       player!.bankBalance = previousBankBalance;
+      _addMonthlyExpense('equipment', -amount);
       return false;
     }
   }
 
-  /// Advance the game by one day. Grows crops, checks BNPL dues via Cloud, etc.
-  Future<void> advanceDay() async {
-    currentDay++;
+  Future<bool> unlockEquipment(String equipmentName) async {
+    if (player == null) return false;
 
-    // Grow crops based on in-game days
+    final previousTractorOwned = player!.tractorOwned;
+    final previousAutoHarvestEnabled = player!.autoHarvestEnabled;
+    final previousFertilizerPackCount = player!.fertilizerPackCount;
+
+    if (equipmentName == 'Tractor') {
+      player!.tractorOwned = true;
+      player!.autoHarvestEnabled = true;
+    }
+
+    if (equipmentName == 'Fertilizer Pack') {
+      player!.fertilizerPackCount += 1;
+    }
+
+    try {
+      await _savePlayerState();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      player!.tractorOwned = previousTractorOwned;
+      player!.autoHarvestEnabled = previousAutoHarvestEnabled;
+      player!.fertilizerPackCount = previousFertilizerPackCount;
+      return false;
+    }
+  }
+
+  Future<int> useFertilizerPack() async {
+    if (player == null || player!.fertilizerPackCount <= 0) return -1;
+
+    final previousGrowthStages = <Tile, int>{};
+    var boostedCount = 0;
+
     for (final row in grid) {
       for (final tile in row) {
-        if (tile.hasCrop && tile.growthStage < 3) {
-          final config = kCropConfig[tile.crop!]!;
-          final growthDays = config['growthDays'] as int;
-          final daysSincePlant = tile.plantedDay != null
-              ? currentDay - tile.plantedDay!
-              : 0;
+        if (!tile.hasCrop || tile.growthStage >= 3) continue;
+        previousGrowthStages[tile] = tile.growthStage;
+        tile.growthStage = (tile.growthStage + 1).clamp(0, 3);
+        boostedCount++;
+      }
+    }
 
-          // Simple growth: divide total growth time into 3 stages
-          final stageInterval = growthDays ~/ 3;
-          if (stageInterval > 0) {
-            tile.growthStage = (daysSincePlant ~/ stageInterval).clamp(0, 3);
-          } else {
-            // If growth is less than 3 days, grow 1 stage per day
-            tile.growthStage = daysSincePlant.clamp(0, 3);
+    if (boostedCount == 0) {
+      return 0;
+    }
+
+    final previousFertilizerPackCount = player!.fertilizerPackCount;
+    player!.fertilizerPackCount -= 1;
+
+    try {
+      await _savePlayerState();
+      notifyListeners();
+      return boostedCount;
+    } catch (_) {
+      player!.fertilizerPackCount = previousFertilizerPackCount;
+      previousGrowthStages.forEach((tile, growthStage) {
+        tile.growthStage = growthStage;
+      });
+      return -1;
+    }
+  }
+
+  Future<bool> setAutoHarvestEnabled(bool enabled) async {
+    if (player == null || !player!.tractorOwned) return false;
+
+    final previous = player!.autoHarvestEnabled;
+    player!.autoHarvestEnabled = enabled;
+
+    try {
+      await _savePlayerState();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      player!.autoHarvestEnabled = previous;
+      return false;
+    }
+  }
+
+  int _applyAutoHarvest() {
+    if (!tractorOwned || !autoHarvestEnabled || player == null) return 0;
+
+    var harvestedCount = 0;
+    for (final row in grid) {
+      for (final tile in row) {
+        if (!tile.isHarvestable) continue;
+        final harvested = tile.harvest();
+        if (harvested == null) continue;
+
+        final key = harvested.name;
+        final current = player!.inventory[key] ?? 0;
+        player!.inventory[key] = current + 1;
+        harvestedCount++;
+      }
+    }
+    return harvestedCount;
+  }
+
+  /// Advance the game by one day. Grows crops, checks BNPL dues via Cloud, etc.
+  Future<bool> advanceDay() async {
+    _resetManualNextDayIfNewDate();
+
+    final previousCash = player?.cashBalance;
+    final previousBank = player?.bankBalance;
+    final previousUsed = _manualNextDayUsedToday;
+
+    if (!_tryChargeManualNextDayFee()) {
+      notifyListeners();
+      return false;
+    }
+
+    try {
+      await _savePlayerState();
+    } catch (_) {
+      if (player != null && previousCash != null && previousBank != null) {
+        player!.cashBalance = previousCash;
+        player!.bankBalance = previousBank;
+      }
+      _manualNextDayUsedToday = previousUsed;
+      notifyListeners();
+      return false;
+    }
+
+    return _advanceDayCore(isManual: true);
+  }
+
+  Future<bool> _advanceDayCore({required bool isManual}) async {
+    if (_isAdvancingDay) return false;
+    _isAdvancingDay = true;
+    try {
+      final previousYear = currentYear;
+      final previousMonth = currentMonth;
+      currentDay++;
+      if (isManual) {
+        _remainingCycleSeconds = kGameDayDurationMinutes * 60;
+      }
+
+      // Grow crops based on in-game days
+      for (final row in grid) {
+        for (final tile in row) {
+          if (tile.hasCrop && tile.growthStage < 3) {
+            final config = kCropConfig[tile.crop!]!;
+            final growthDays = config['growthDays'] as int;
+            final daysSincePlant = tile.plantedDay != null
+                ? currentDay - tile.plantedDay!
+                : 0;
+
+            // Simple growth: divide total growth time into 3 stages
+            final stageInterval = growthDays ~/ 3;
+            if (stageInterval > 0) {
+              tile.growthStage = (daysSincePlant ~/ stageInterval).clamp(0, 3);
+            } else {
+              // If growth is less than 3 days, grow 1 stage per day
+              tile.growthStage = daysSincePlant.clamp(0, 3);
+            }
           }
         }
+      }
+
+      _applyAutoHarvest();
+
+      notifyListeners();
+
+      // Fire-and-forget server checks
+      if (player != null) {
+        var needsRefresh = false;
+        var disasterTriggeredToday = false;
+
+        // 1. Weather Check
+        final weatherResult = await _weather.checkWeather(
+          player!.gpsLat,
+          player!.gpsLng,
+        );
+        if (weatherResult.hasDisaster && weatherResult.disasterType != null) {
+          DisasterType type = DisasterType.none;
+          // The Cloud Function returns string IDs like 'flood', 'storm', 'drought'
+          if (weatherResult.disasterType == 'flood') {
+            type = DisasterType.flood;
+          }
+          if (weatherResult.disasterType == 'storm') {
+            type = DisasterType.storm;
+          }
+          if (weatherResult.disasterType == 'drought') {
+            type = DisasterType.drought;
+          }
+          triggerDisaster(type);
+          disasterTriggeredToday = true;
+        } else {
+          // Daily fallback probability: if weather API has no disaster, roll one locally.
+          if (_random.nextDouble() < kDailyDisasterChance) {
+            final rolled = [
+              DisasterType.flood,
+              DisasterType.storm,
+              DisasterType.drought,
+            ];
+            final randomType = rolled[_random.nextInt(rolled.length)];
+            triggerDisaster(randomType);
+            disasterTriggeredToday = true;
+          }
+        }
+
+        if (!disasterTriggeredToday) {
+          clearDisaster();
+        }
+
+        // 2. BNPL Auto-payment / Penalty check
+        for (final plan in bnplPlans) {
+          if (plan.status == BnplStatus.active) {
+            final result = await _cloud.calculateBnplPenalty(plan.id);
+            // If a penalty was applied or defaulted, it modified the user wallet in Firestore
+            if ((result['penalty'] != null && result['penalty'] > 0) ||
+                (result['autoPaid'] == true) ||
+                (result['paidInstallment'] == true)) {
+              if (result['penalty'] != null && result['penalty'] > 0) {
+                _addMonthlyExpense(
+                  'interest',
+                  (result['penalty'] as num).toDouble(),
+                );
+              }
+              needsRefresh = true;
+            }
+          }
+        }
+
+        // If the server altered our wallet, fetch fresh state
+        if (needsRefresh) {
+          final updatedUser = await _firestore.getPlayer(
+            player!.uid,
+            forceRefresh: true,
+          );
+          if (updatedUser != null) {
+            player = updatedUser;
+            notifyListeners();
+          }
+        }
+
+        // 3. Weekly Credit Score recalc
+        if (currentDay % 7 == 0) {
+          final creditResult = await _cloud.calculateCreditScore();
+          if (creditResult['score'] != null) {
+            player!.creditScore = creditResult['score'] as int;
+            notifyListeners();
+          }
+        }
+      }
+
+      final monthChanged =
+          (currentYear != previousYear) || (currentMonth != previousMonth);
+      if (monthChanged) {
+        _processLoanSharkRepaymentsOnMonthEnd();
+        _pendingMonthlyReport = _buildMonthlyReport(
+          reportYear: previousYear,
+          reportMonth: previousMonth,
+        );
+      }
+
+      return true;
+    } finally {
+      _isAdvancingDay = false;
+    }
+  }
+
+  MonthlyPnLReport _buildMonthlyReport({
+    required int reportYear,
+    required int reportMonth,
+  }) {
+    final expenses = Map<String, double>.from(_monthlyExpenses);
+    final totalExpense = expenses.values.fold(0.0, (sum, value) => sum + value);
+    final netProfit = _monthlyIncome - totalExpense;
+
+    String topCategory = 'none';
+    double topValue = 0;
+    expenses.forEach((category, value) {
+      if (value > topValue) {
+        topValue = value;
+        topCategory = category;
+      }
+    });
+
+    final report = MonthlyPnLReport(
+      year: reportYear,
+      month: reportMonth,
+      income: _monthlyIncome,
+      expenses: expenses,
+      netProfit: netProfit,
+      topExpenseCategory: topCategory,
+    );
+
+    for (final key in _monthlyExpenses.keys) {
+      _monthlyExpenses[key] = 0;
+    }
+    _monthlyIncome = 0;
+
+    return report;
+  }
+
+  Future<Map<String, dynamic>> repayBnplPlan(
+    String planId,
+    PaymentMethod method,
+  ) async {
+    if (player == null) {
+      return {'paidInstallment': false, 'message': 'Player not loaded.'};
+    }
+
+    final result = await _cloud.repayBnplInstallment(planId, method.name);
+
+    final updatedUser = await _firestore.getPlayer(
+      player!.uid,
+      forceRefresh: true,
+    );
+    if (updatedUser != null) {
+      player = updatedUser;
+    }
+
+    final index = bnplPlans.indexWhere((plan) => plan.id == planId);
+    if (index >= 0 && result['paidInstallment'] == true) {
+      final plan = bnplPlans[index];
+      plan.paidInstallments = (plan.paidInstallments + 1).clamp(
+        0,
+        plan.installments,
+      );
+      plan.lateFees = 0;
+      plan.nextDueDate = DateTime.now().add(const Duration(days: 30));
+      if (result['completed'] == true ||
+          plan.paidInstallments >= plan.installments) {
+        plan.status = BnplStatus.paid;
       }
     }
 
     notifyListeners();
-
-    // Fire-and-forget server checks
-    if (player != null) {
-      var needsRefresh = false;
-      var disasterTriggeredToday = false;
-
-      // 1. Weather Check
-      final weatherResult = await _weather.checkWeather(
-        player!.gpsLat,
-        player!.gpsLng,
-      );
-      if (weatherResult.hasDisaster && weatherResult.disasterType != null) {
-        DisasterType type = DisasterType.none;
-        // The Cloud Function returns string IDs like 'flood', 'storm', 'drought'
-        if (weatherResult.disasterType == 'flood') {
-          type = DisasterType.flood;
-        }
-        if (weatherResult.disasterType == 'storm') {
-          type = DisasterType.storm;
-        }
-        if (weatherResult.disasterType == 'drought') {
-          type = DisasterType.drought;
-        }
-        triggerDisaster(type);
-        disasterTriggeredToday = true;
-      } else {
-        // Daily fallback probability: if weather API has no disaster, roll one locally.
-        if (_random.nextDouble() < kDailyDisasterChance) {
-          final rolled = [
-            DisasterType.flood,
-            DisasterType.storm,
-            DisasterType.drought,
-          ];
-          final randomType = rolled[_random.nextInt(rolled.length)];
-          triggerDisaster(randomType);
-          disasterTriggeredToday = true;
-        }
-      }
-
-      if (!disasterTriggeredToday) {
-        clearDisaster();
-      }
-
-      // 2. BNPL Auto-payment / Penalty check
-      for (final plan in bnplPlans) {
-        if (plan.status == BnplStatus.active) {
-          final result = await _cloud.calculateBnplPenalty(plan.id);
-          // If a penalty was applied or defaulted, it modified the user wallet in Firestore
-          if (result['penalty'] != null && result['penalty'] > 0) {
-            needsRefresh = true;
-          }
-        }
-      }
-
-      // If the server altered our wallet, fetch fresh state
-      if (needsRefresh) {
-        final updatedUser = await _firestore.getPlayer(player!.uid);
-        if (updatedUser != null) {
-          player = updatedUser;
-          notifyListeners();
-        }
-      }
-
-      // 3. Weekly Credit Score recalc
-      if (currentDay % 7 == 0) {
-        final creditResult = await _cloud.calculateCreditScore();
-        if (creditResult['score'] != null) {
-          player!.creditScore = creditResult['score'] as int;
-          notifyListeners();
-        }
-      }
-    }
+    return result;
   }
 
   /// Trigger a disaster event — destroy uninsured crops.
@@ -394,5 +834,50 @@ class GameState extends ChangeNotifier {
   /// Notify listeners that state has changed (called from UI after external mutation).
   void refresh() {
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _dayCycleTimer?.cancel();
+    _loanSharkThreatTimer?.cancel();
+    super.dispose();
+  }
+}
+
+class MonthlyPnLReport {
+  final int year;
+  final int month;
+  final double income;
+  final Map<String, double> expenses;
+  final double netProfit;
+  final String topExpenseCategory;
+
+  const MonthlyPnLReport({
+    required this.year,
+    required this.month,
+    required this.income,
+    required this.expenses,
+    required this.netProfit,
+    required this.topExpenseCategory,
+  });
+
+  double get totalExpense =>
+      expenses.values.fold(0.0, (sum, value) => sum + value);
+
+  String get topExpenseLabel {
+    switch (topExpenseCategory) {
+      case 'seed':
+        return 'Seeds';
+      case 'interest':
+        return 'Interest & Late Fees';
+      case 'insurance':
+        return 'Insurance';
+      case 'equipment':
+        return 'Equipment';
+      case 'nextDayFee':
+        return 'Next Day Fees';
+      default:
+        return 'N/A';
+    }
   }
 }

@@ -155,49 +155,152 @@ class MerchantScreen extends StatelessWidget {
                                             ),
                                     ),
                                   ),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
+                                  child: Column(
                                     children: [
-                                      Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
                                         children: [
-                                          Text(
-                                            plan.itemName,
-                                            style: const TextStyle(
-                                              color: GameColors.uiText,
-                                              fontWeight: FontWeight.bold,
-                                            ),
+                                          Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                plan.itemName,
+                                                style: const TextStyle(
+                                                  color: GameColors.uiText,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              Text(
+                                                '${plan.paidInstallments}/${plan.installments} paid',
+                                                style: const TextStyle(
+                                                  color: GameColors.uiTextDim,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                          Text(
-                                            '${plan.paidInstallments}/${plan.installments} paid',
-                                            style: const TextStyle(
-                                              color: GameColors.uiTextDim,
-                                              fontSize: 12,
-                                            ),
+                                          Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.end,
+                                            children: [
+                                              Text(
+                                                '${CurrencyUtil.format(plan.monthlyAmount, player.country)}/mo',
+                                                style: const TextStyle(
+                                                  color: GameColors.uiGold,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              if (plan.lateFees > 0)
+                                                Text(
+                                                  'Late fees: ${CurrencyUtil.format(plan.lateFees, player.country)}',
+                                                  style: const TextStyle(
+                                                    color: GameColors.uiRed,
+                                                    fontSize: 11,
+                                                  ),
+                                                ),
+                                            ],
                                           ),
                                         ],
                                       ),
-                                      Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.end,
+                                      const SizedBox(height: 8),
+                                      Row(
                                         children: [
-                                          Text(
-                                            '${CurrencyUtil.format(plan.monthlyAmount, player.country)}/mo',
-                                            style: const TextStyle(
-                                              color: GameColors.uiGold,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          if (plan.lateFees > 0)
-                                            Text(
-                                              'Late fees: ${CurrencyUtil.format(plan.lateFees, player.country)}',
-                                              style: const TextStyle(
-                                                color: GameColors.uiRed,
-                                                fontSize: 11,
+                                          Expanded(
+                                            child: OutlinedButton(
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor:
+                                                    GameColors.uiGold,
+                                                side: const BorderSide(
+                                                  color: GameColors.uiGold,
+                                                ),
+                                              ),
+                                              onPressed: () async {
+                                                final result = await state
+                                                    .repayBnplPlan(
+                                                      plan.id,
+                                                      PaymentMethod.cash,
+                                                    );
+                                                if (!context.mounted) return;
+                                                DialogPopup.show(
+                                                  context,
+                                                  title:
+                                                      result['paidInstallment'] ==
+                                                          true
+                                                      ? '✅ Installment Paid'
+                                                      : '⚠️ Payment Failed',
+                                                  message:
+                                                      (result['message']
+                                                          as String?) ??
+                                                      'Unable to process payment.',
+                                                  icon:
+                                                      result['paidInstallment'] ==
+                                                          true
+                                                      ? Icons.check_circle
+                                                      : Icons.warning_amber,
+                                                  iconColor:
+                                                      result['paidInstallment'] ==
+                                                          true
+                                                      ? GameColors.uiGreen
+                                                      : GameColors.uiRed,
+                                                );
+                                              },
+                                              child: const Text(
+                                                'Pay Now (Cash)',
                                               ),
                                             ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: OutlinedButton(
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor:
+                                                    GameColors.uiGreen,
+                                                side: const BorderSide(
+                                                  color: GameColors.uiGreen,
+                                                ),
+                                              ),
+                                              onPressed: player.bankRegistered
+                                                  ? () async {
+                                                      final result = await state
+                                                          .repayBnplPlan(
+                                                            plan.id,
+                                                            PaymentMethod.bank,
+                                                          );
+                                                      if (!context.mounted) {
+                                                        return;
+                                                      }
+                                                      DialogPopup.show(
+                                                        context,
+                                                        title:
+                                                            result['paidInstallment'] ==
+                                                                true
+                                                            ? '✅ Installment Paid'
+                                                            : '⚠️ Payment Failed',
+                                                        message:
+                                                            (result['message']
+                                                                as String?) ??
+                                                            'Unable to process payment.',
+                                                        icon:
+                                                            result['paidInstallment'] ==
+                                                                true
+                                                            ? Icons.check_circle
+                                                            : Icons
+                                                                  .warning_amber,
+                                                        iconColor:
+                                                            result['paidInstallment'] ==
+                                                                true
+                                                            ? GameColors.uiGreen
+                                                            : GameColors.uiRed,
+                                                      );
+                                                    }
+                                                  : null,
+                                              child: const Text(
+                                                'Pay Now (Bank)',
+                                              ),
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ],
@@ -371,11 +474,14 @@ class _EquipmentCard extends StatelessWidget {
                             PaymentMethod.cash,
                           );
                           if (!context.mounted || !success) return;
+                          await state.unlockEquipment(equipment.name);
+                          if (!context.mounted) return;
                           DialogPopup.show(
                             context,
                             title: '✅ Purchased!',
-                            message:
-                                '${equipment.name} bought with CASH for ${CurrencyUtil.format(equipment.price, player.country)}.',
+                            message: equipment.name == 'Fertilizer Pack'
+                                ? 'Fertilizer Pack bought with CASH for ${CurrencyUtil.format(equipment.price, player.country)}.\n\nAdded to your inventory. Use it manually from HUD.'
+                                : '${equipment.name} bought with CASH for ${CurrencyUtil.format(equipment.price, player.country)}.',
                             icon: Icons.check_circle,
                             iconColor: GameColors.uiGreen,
                           );
@@ -407,11 +513,14 @@ class _EquipmentCard extends StatelessWidget {
                             PaymentMethod.bank,
                           );
                           if (!context.mounted || !success) return;
+                          await state.unlockEquipment(equipment.name);
+                          if (!context.mounted) return;
                           DialogPopup.show(
                             context,
                             title: '✅ Purchased!',
-                            message:
-                                '${equipment.name} bought with BANK for ${CurrencyUtil.format(equipment.price, player.country)}.',
+                            message: equipment.name == 'Fertilizer Pack'
+                                ? 'Fertilizer Pack bought with BANK for ${CurrencyUtil.format(equipment.price, player.country)}.\n\nAdded to your inventory. Use it manually from HUD.'
+                                : '${equipment.name} bought with BANK for ${CurrencyUtil.format(equipment.price, player.country)}.',
                             icon: Icons.check_circle,
                             iconColor: GameColors.uiGreen,
                           );
@@ -456,6 +565,7 @@ class _EquipmentCard extends StatelessWidget {
                       );
                       await FirestoreService().createBnplPlan(player.uid, plan);
                       state.bnplPlans.add(plan);
+                      await state.unlockEquipment(equipment.name);
                       state.refresh();
 
                       if (!context.mounted) return;
@@ -464,6 +574,7 @@ class _EquipmentCard extends StatelessWidget {
                         title: '📦 BNPL Activated!',
                         message:
                             '${equipment.name} acquired on ${months}x installments.\n\n'
+                            '${equipment.name == 'Fertilizer Pack' ? 'Added to your inventory. Use it manually from HUD.\n\n' : ''}'
                             'Monthly payment: ${CurrencyUtil.format(monthly, player.country, decimals: 2)}\n\n'
                             '⚠️ Late payments will incur:\n'
                             '• ${CurrencyUtil.format(kBnplAdminFee, player.country)} admin fee\n'

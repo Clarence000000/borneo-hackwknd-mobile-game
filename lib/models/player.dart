@@ -17,6 +17,11 @@ class Player {
   // Credit
   int creditScore;
 
+  // Equipment effects
+  bool tractorOwned;
+  bool autoHarvestEnabled;
+  int fertilizerPackCount;
+
   // Inventory: crop key -> quantity (e.g. {'wheat': 5})
   Map<String, int> inventory;
 
@@ -33,6 +38,9 @@ class Player {
     this.bankBalance = 0,
     this.bankRegistered = false,
     this.creditScore = 500,
+    this.tractorOwned = false,
+    this.autoHarvestEnabled = false,
+    this.fertilizerPackCount = 0,
     Map<String, int>? inventory,
   }) : inventory = Map<String, int>.from(inventory ?? {}),
        createdAt = createdAt ?? DateTime.now();
@@ -80,6 +88,9 @@ class Player {
     'bankBalance': bankBalance,
     'bankRegistered': bankRegistered,
     'creditScore': creditScore,
+    'tractorOwned': tractorOwned,
+    'autoHarvestEnabled': autoHarvestEnabled,
+    'fertilizerPackCount': fertilizerPackCount,
     'inventory': inventory,
   };
 
@@ -98,6 +109,9 @@ class Player {
     bankBalance: (map['bankBalance'] as num?)?.toDouble() ?? 0,
     bankRegistered: map['bankRegistered'] as bool? ?? false,
     creditScore: map['creditScore'] as int? ?? 500,
+    tractorOwned: map['tractorOwned'] as bool? ?? false,
+    autoHarvestEnabled: map['autoHarvestEnabled'] as bool? ?? false,
+    fertilizerPackCount: map['fertilizerPackCount'] as int? ?? 0,
     inventory:
         (map['inventory'] as Map<String, dynamic>?)?.map(
           (key, value) => MapEntry(key, (value as num?)?.toInt() ?? 0),

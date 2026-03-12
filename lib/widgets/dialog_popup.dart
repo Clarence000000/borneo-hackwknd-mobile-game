@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import 'package:farm_fintech/config/theme.dart';
@@ -48,76 +50,88 @@ class DialogPopup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
-      child: Container(
-        margin: const EdgeInsets.all(16),
-        constraints: BoxConstraints(
-          maxWidth: 420,
-          maxHeight: MediaQuery.of(context).size.height * 0.85,
-        ),
-        decoration: BoxDecoration(
-          color: GameColors.uiPanel,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: GameColors.uiAccent),
-          boxShadow: [
-            BoxShadow(
-              color: GameColors.uiHighlight.withValues(alpha: 0.2),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
+      color: Colors.black.withValues(alpha: 0.2),
+      child: ClipRRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+          child: Container(
+            margin: const EdgeInsets.all(16),
+            constraints: BoxConstraints(
+              maxWidth: 420,
+              maxHeight: MediaQuery.of(context).size.height * 0.85,
             ),
-          ],
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (icon != null) ...[
-                Icon(icon, color: iconColor ?? GameColors.uiGold, size: 36),
-                const SizedBox(height: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withValues(alpha: 0.17),
+                  GameColors.uiPanel.withValues(alpha: 0.55),
+                ],
+              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+              boxShadow: [
+                BoxShadow(
+                  color: GameColors.uiHighlight.withValues(alpha: 0.22),
+                  blurRadius: 26,
+                  offset: const Offset(0, 10),
+                ),
               ],
-              Text(
-                title,
-                style: const TextStyle(
-                  color: GameColors.uiText,
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                message,
-                style: const TextStyle(
-                  color: GameColors.uiTextDim,
-                  fontSize: 13,
-                  height: 1.4,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: GameColors.uiHighlight,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  onPressed: onDismiss,
-                  child: Text(
-                    buttonText ?? 'Got it!',
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon, color: iconColor ?? GameColors.uiGold, size: 36),
+                    const SizedBox(height: 10),
+                  ],
+                  Text(
+                    title,
                     style: const TextStyle(
+                      color: GameColors.uiText,
+                      fontSize: 17,
                       fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    message,
+                    style: const TextStyle(
+                      color: GameColors.uiTextDim,
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: GameColors.uiHighlight,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: onDismiss,
+                      child: Text(
+                        buttonText ?? 'Got it!',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

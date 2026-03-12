@@ -1,6 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:farm_fintech/config/constants.dart';
 import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/models/weather_event.dart';
@@ -20,6 +23,18 @@ const _countryFlags = {
   'VN': '🇻🇳',
 };
 
+// Approximate USD conversion rates for display-only switching in HUD.
+const _currencyToUsdRate = {
+  'MY': 0.21,
+  'ID': 0.000064,
+  'SG': 0.74,
+  'TH': 0.028,
+  'PH': 0.018,
+  'VN': 0.000040,
+};
+
+const _aseanCountries = ['MY', 'ID', 'SG', 'TH', 'PH', 'VN'];
+
 /// In-game HUD — landscape optimized.
 ///
 /// Layout:
@@ -30,8 +45,15 @@ const _countryFlags = {
 /// │                                        [Bank]       │
 /// │                                        [Shop]       │
 /// └─────────────────────────────────────────────────────┘
-class HudOverlay extends StatelessWidget {
+class HudOverlay extends StatefulWidget {
   const HudOverlay({super.key});
+
+  @override
+  State<HudOverlay> createState() => _HudOverlayState();
+}
+
+class _HudOverlayState extends State<HudOverlay> {
+  String? _displayCountry;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +61,19 @@ class HudOverlay extends StatelessWidget {
       builder: (context, state, _) {
         final player = state.player;
         if (player == null) return const SizedBox();
+
+        _displayCountry ??= player.country;
+        final displayCountry = _displayCountry ?? player.country;
+        final displayCash = _convertCurrency(
+          player.cashBalance,
+          fromCountry: player.country,
+          toCountry: displayCountry,
+        );
+        final displayBank = _convertCurrency(
+          player.bankBalance,
+          fromCountry: player.country,
+          toCountry: displayCountry,
+        );
 
         return SafeArea(
           child: Padding(
@@ -81,10 +116,7 @@ class HudOverlay extends StatelessWidget {
                     // Cash badge
                     _HudBadge(
                       icon: Icons.monetization_on,
-                      label: CurrencyUtil.format(
-                        player.cashBalance,
-                        player.country,
-                      ),
+                      label: CurrencyUtil.format(displayCash, displayCountry),
                       color: GameColors.uiGold,
                     ),
                     const SizedBox(width: 6),
@@ -93,14 +125,42 @@ class HudOverlay extends StatelessWidget {
                     if (player.bankRegistered) ...[
                       _HudBadge(
                         icon: Icons.account_balance,
-                        label: CurrencyUtil.format(
-                          player.bankBalance,
-                          player.country,
-                        ),
+                        label: CurrencyUtil.format(displayBank, displayCountry),
                         color: GameColors.uiGreen,
                       ),
                       const SizedBox(width: 6),
                     ],
+
+                    GestureDetector(
+                      onTap: () {
+                        final currentIndex = _aseanCountries.indexOf(
+                          displayCountry,
+                        );
+                        final nextIndex =
+                            (currentIndex + 1) % _aseanCountries.length;
+                        setState(() {
+                          _displayCountry = _aseanCountries[nextIndex];
+                        });
+                      },
+                      child: _HudChip(
+                        children: [
+                          Text(
+                            _countryFlags[displayCountry] ?? '🌏',
+                            style: const TextStyle(fontSize: 15),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            displayCountry,
+                            style: const TextStyle(
+                              color: GameColors.uiText,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
 
                     // Credit score badge
                     _CreditScoreBadge(score: player.creditScore),
@@ -110,6 +170,30 @@ class HudOverlay extends StatelessWidget {
                       icon: Icons.inventory_2,
                       label: '${player.totalInventoryItems}',
                       color: GameColors.uiAccent,
+                    ),
+                    const SizedBox(width: 6),
+
+                    _HudBadge(
+                      icon: Icons.science,
+                      label: 'Fert ${state.fertilizerPackCount}',
+                      color: state.fertilizerPackCount > 0
+                          ? GameColors.uiHighlight
+                          : GameColors.uiTextDim,
+                    ),
+                    const SizedBox(width: 6),
+
+                    _HudBadge(
+                      icon: Icons.agriculture,
+                      label: state.tractorOwned
+                          ? (state.autoHarvestEnabled
+                                ? 'Tractor Active'
+                                : 'Tractor Paused')
+                          : 'No Tractor',
+                      color: state.tractorOwned
+                          ? (state.autoHarvestEnabled
+                                ? GameColors.uiGreen
+                                : GameColors.uiGold)
+                          : GameColors.uiTextDim,
                     ),
 
                     const Spacer(),
@@ -122,10 +206,22 @@ class HudOverlay extends StatelessWidget {
                     ),
                     const SizedBox(width: 6),
 
+                    _HudBadge(
+                      icon: state.isDaytime
+                          ? Icons.wb_sunny
+                          : Icons.nightlight_round,
+                      label:
+                          '${state.dayPhaseLabel} ${_formatCountdown(state.remainingCycleSeconds)}',
+                      color: state.isDaytime
+                          ? GameColors.uiGold
+                          : GameColors.uiAccent,
+                    ),
+                    const SizedBox(width: 6),
+
                     // Day counter
                     _HudBadge(
                       icon: Icons.wb_sunny,
-                      label: 'Day ${state.currentDay}',
+                      label: state.gameDateLabel,
                       color: GameColors.uiHighlight,
                     ),
                   ],
@@ -139,11 +235,142 @@ class HudOverlay extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      _HudChip(
+                        children: [
+                          Text(
+                            'Free ${state.freeNextDayRemaining}/$kFreeManualNextDayPerRealDay',
+                            style: const TextStyle(
+                              color: GameColors.uiText,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Then ${kManualNextDayCost.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              color: GameColors.uiGold,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
                       _HudActionButton(
                         icon: Icons.skip_next,
                         tooltip: 'Next Day',
                         color: GameColors.uiHighlight,
-                        onPressed: () => state.advanceDay(),
+                        onPressed: () {
+                          state.advanceDay().then((ok) {
+                            if (!ok && context.mounted) {
+                              final messenger = ScaffoldMessenger.of(context);
+                              messenger
+                                ..hideCurrentSnackBar()
+                                ..clearSnackBars();
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  duration: const Duration(seconds: 2),
+                                  behavior: SnackBarBehavior.floating,
+                                  showCloseIcon: true,
+                                  dismissDirection: DismissDirection.down,
+                                  content: Text(
+                                    'No free Next Day left today. Need ${kManualNextDayCost.toStringAsFixed(0)} currency.',
+                                  ),
+                                ),
+                              );
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 6),
+                      if (state.tractorOwned) ...[
+                        _HudActionButton(
+                          icon: state.autoHarvestEnabled
+                              ? Icons.agriculture
+                              : Icons.agriculture_outlined,
+                          tooltip: state.autoHarvestEnabled
+                              ? 'Disable Auto Harvest'
+                              : 'Enable Auto Harvest',
+                          color: state.autoHarvestEnabled
+                              ? GameColors.uiGreen
+                              : GameColors.uiGold,
+                          onPressed: () {
+                            final target = !state.autoHarvestEnabled;
+                            state.setAutoHarvestEnabled(target).then((ok) {
+                              if (!ok || !context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  duration: const Duration(seconds: 1),
+                                  content: Text(
+                                    target
+                                        ? 'Auto harvest enabled.'
+                                        : 'Auto harvest paused.',
+                                  ),
+                                ),
+                              );
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 6),
+                      ],
+                      _HudActionButton(
+                        icon: Icons.science,
+                        tooltip: 'Use Fertilizer Pack',
+                        color: state.fertilizerPackCount > 0
+                            ? GameColors.uiHighlight
+                            : GameColors.uiTextDim,
+                        onPressed: () {
+                          state.useFertilizerPack().then((boostedCount) {
+                            if (!context.mounted) return;
+                            final messenger = ScaffoldMessenger.of(context);
+                            messenger
+                              ..hideCurrentSnackBar()
+                              ..clearSnackBars();
+
+                            if (boostedCount > 0) {
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  duration: const Duration(seconds: 2),
+                                  behavior: SnackBarBehavior.floating,
+                                  showCloseIcon: true,
+                                  dismissDirection: DismissDirection.down,
+                                  content: Text(
+                                    'Used 1 Fertilizer Pack. Boosted $boostedCount crops by +1 stage.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+
+                            if (boostedCount == 0) {
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  duration: Duration(seconds: 2),
+                                  behavior: SnackBarBehavior.floating,
+                                  showCloseIcon: true,
+                                  dismissDirection: DismissDirection.down,
+                                  content: Text(
+                                    'No growing crops to fertilize right now.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                duration: Duration(seconds: 2),
+                                behavior: SnackBarBehavior.floating,
+                                showCloseIcon: true,
+                                dismissDirection: DismissDirection.down,
+                                content: Text(
+                                  'No Fertilizer Pack available or use failed.',
+                                ),
+                              ),
+                            );
+                          });
+                        },
                       ),
                       const SizedBox(height: 6),
                       _HudActionButton(
@@ -245,6 +472,24 @@ class HudOverlay extends StatelessWidget {
         );
       },
     );
+  }
+
+  double _convertCurrency(
+    double amount, {
+    required String fromCountry,
+    required String toCountry,
+  }) {
+    final fromRate = _currencyToUsdRate[fromCountry];
+    final toRate = _currencyToUsdRate[toCountry];
+    if (fromRate == null || toRate == null || fromRate == 0) return amount;
+    final amountInUsd = amount * fromRate;
+    return amountInUsd / toRate;
+  }
+
+  String _formatCountdown(int seconds) {
+    final min = (seconds ~/ 60).toString().padLeft(2, '0');
+    final sec = (seconds % 60).toString().padLeft(2, '0');
+    return '$min:$sec';
   }
 
   IconData _weatherIcon(dynamic disaster) {
@@ -360,29 +605,82 @@ class _CreditScoreBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final normalized = ((score - 300) / 550).clamp(0.0, 1.0);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: GameColors.uiPanel.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _color.withValues(alpha: 0.4)),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _color.withValues(alpha: 0.45)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.speed, color: _color, size: 16),
-          const SizedBox(width: 4),
+          SizedBox(
+            width: 30,
+            height: 18,
+            child: CustomPaint(
+              painter: _SemiGaugePainter(progress: normalized, color: _color),
+            ),
+          ),
+          const SizedBox(width: 5),
           Text(
             '$score',
             style: TextStyle(
               color: _color,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              fontSize: 11,
             ),
           ),
         ],
       ),
     );
+  }
+}
+
+class _SemiGaugePainter extends CustomPainter {
+  final double progress;
+  final Color color;
+
+  const _SemiGaugePainter({required this.progress, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height);
+    final radius = math.min(size.width / 2, size.height - 1);
+
+    final basePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.2)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+
+    final progressPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      math.pi,
+      math.pi,
+      false,
+      basePaint,
+    );
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      math.pi,
+      math.pi * progress,
+      false,
+      progressPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _SemiGaugePainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.color != color;
   }
 }
 

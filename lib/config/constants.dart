@@ -72,4 +72,13 @@ const double kInsurancePremiumRate = 0.10; // 10% of coverage
 
 // ─── Disaster Config ───────────────────────────────────────────
 // Fallback client-side disaster roll per in-game day when API reports no disaster.
-const double kDailyDisasterChance = 0.25;
+const double kDailyDisasterChance = 0.10;
+
+// ─── Game Time & Skip-Day Config ───────────────────────────────
+const int kGameDayDurationMinutes = 20;
+const int kGameDaylightMinutes = 10;
+const int kGameNightMinutes = 10;
+const int kGameDaysPerMonth = 30;
+const int kGameMonthsPerYear = 12;
+const int kFreeManualNextDayPerRealDay = 5;
+const double kManualNextDayCost = 10.0;

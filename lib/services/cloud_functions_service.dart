@@ -6,7 +6,10 @@ class CloudFunctionsService {
   final FirebaseFunctions _functions = FirebaseFunctions.instance;
 
   /// Evaluate if the player qualifies for a loan based on their credit score
-  Future<Map<String, dynamic>> evaluateLoan(double amount, int termMonths) async {
+  Future<Map<String, dynamic>> evaluateLoan(
+    double amount,
+    int termMonths,
+  ) async {
     try {
       final callable = _functions.httpsCallable('evaluateLoan');
       final result = await callable.call({
@@ -29,6 +32,24 @@ class CloudFunctionsService {
     } catch (e) {
       debugPrint('Error calling calculateBnplPenalty: $e');
       return {'penalty': 0, 'error': e.toString()};
+    }
+  }
+
+  /// Repay one BNPL installment using selected wallet method.
+  Future<Map<String, dynamic>> repayBnplInstallment(
+    String planId,
+    String paymentMethod,
+  ) async {
+    try {
+      final callable = _functions.httpsCallable('repayBnplInstallment');
+      final result = await callable.call({
+        'planId': planId,
+        'paymentMethod': paymentMethod,
+      });
+      return Map<String, dynamic>.from(result.data);
+    } catch (e) {
+      debugPrint('Error calling repayBnplInstallment: $e');
+      return {'paidInstallment': false, 'error': e.toString()};
     }
   }
 

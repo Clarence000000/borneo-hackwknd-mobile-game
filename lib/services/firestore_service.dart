@@ -21,11 +21,11 @@ class FirestoreService {
   }
 
   /// Get the player from Firestore
-  Future<Player?> getPlayer(String uid) async {
-    if (_cachedPlayer != null && _cachedPlayer!.uid == uid) {
+  Future<Player?> getPlayer(String uid, {bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedPlayer != null && _cachedPlayer!.uid == uid) {
       return _cachedPlayer;
     }
-    
+
     final doc = await _db.collection('users').doc(uid).get();
     if (!doc.exists) return null;
 
@@ -37,7 +37,10 @@ class FirestoreService {
   /// Update an existing player's profile data
   Future<void> savePlayer(Player player) async {
     _cachedPlayer = player;
-    await _db.collection('users').doc(player.uid).set(player.toMap(), SetOptions(merge: true));
+    await _db
+        .collection('users')
+        .doc(player.uid)
+        .set(player.toMap(), SetOptions(merge: true));
   }
 
   /// Create a new BNPL plan in the user's subcollection
@@ -48,18 +51,21 @@ class FirestoreService {
         .collection('bnplPlans')
         .doc(plan.id)
         .set({
-      'id': plan.id,
-      'itemName': plan.itemName,
-      'totalAmount': plan.totalAmount,
-      'remainingAmount': plan.remainingAmount,
-      'termMonths': plan.installments,
-      'paidMonths': plan.paidInstallments,
-      'monthlyPayment': plan.monthlyAmount,
-      'status': plan.status.name,
-      'nextDueDate': Timestamp.fromDate(plan.nextDueDate),
-      'lateFees': plan.lateFees,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+          'id': plan.id,
+          'itemName': plan.itemName,
+          'totalAmount': plan.totalAmount,
+          'remainingAmount': plan.remainingAmount,
+          'installments': plan.installments,
+          'paidInstallments': plan.paidInstallments,
+          'monthlyAmount': plan.monthlyAmount,
+          'termMonths': plan.installments,
+          'paidMonths': plan.paidInstallments,
+          'monthlyPayment': plan.monthlyAmount,
+          'status': plan.status.name,
+          'nextDueDate': Timestamp.fromDate(plan.nextDueDate),
+          'lateFees': plan.lateFees,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
   }
 
   /// Update the leaderboard rankings (simple implementation for now)
@@ -70,23 +76,20 @@ class FirestoreService {
         .collection('rankings')
         .doc(player.uid)
         .set({
-      'displayName': player.displayName,
-      'netWorth': player.totalNetWorth,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+          'displayName': player.displayName,
+          'netWorth': player.totalNetWorth,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
   }
 
   /// Log a transaction to build credit score
-  Future<void> logTransaction(String uid, {
-    required double amount, 
-    required String paymentType, 
-    required String category
+  Future<void> logTransaction(
+    String uid, {
+    required double amount,
+    required String paymentType,
+    required String category,
   }) async {
-    await _db
-        .collection('users')
-        .doc(uid)
-        .collection('transactions')
-        .add({
+    await _db.collection('users').doc(uid).collection('transactions').add({
       'amount': amount,
       'paymentType': paymentType, // 'bank' or 'cash'
       'category': category, // e.g. 'deposit', 'withdrawal', 'bnplPayment'

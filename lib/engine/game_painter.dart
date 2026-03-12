@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'package:farm_fintech/config/theme.dart';
@@ -99,6 +101,9 @@ class GamePainter extends CustomPainter {
     if (tile.hasCrop) {
       SpritePainter.drawCrop(canvas, center, tile.crop!, tile.growthStage);
       _drawCropStatusBadge(canvas, tile, center);
+      if (tile.isHarvestable) {
+        _drawHarvestBubble(canvas, center);
+      }
     }
 
     // ── Buildings (drawn at special tile positions) ──────────
@@ -173,18 +178,59 @@ class GamePainter extends CustomPainter {
   void _drawWeatherOverlay(Canvas canvas, Size size) {
     switch (activeDisaster!) {
       case DisasterType.flood:
+        _drawScreenTint(
+          canvas,
+          size,
+          GameColors.rainDrop.withValues(alpha: 0.16),
+        );
         SpritePainter.drawRain(canvas, size, animationPhase);
         SpritePainter.drawFloodOverlay(canvas, size, 0.6);
       case DisasterType.storm:
+        _drawScreenTint(
+          canvas,
+          size,
+          GameColors.rainDrop.withValues(alpha: 0.2),
+        );
         SpritePainter.drawRain(canvas, size, animationPhase);
       case DisasterType.drought:
-        canvas.drawRect(
-          Rect.fromLTWH(0, 0, size.width, size.height),
-          Paint()..color = GameColors.droughtTint,
-        );
+        _drawScreenTint(canvas, size, const Color(0x55F0B13E));
       case DisasterType.none:
         break;
     }
+  }
+
+  void _drawScreenTint(Canvas canvas, Size size, Color color) {
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      Paint()..color = color,
+    );
+  }
+
+  void _drawHarvestBubble(Canvas canvas, Offset center) {
+    final bob = math.sin(animationPhase * 4) * 2.5;
+    final bubbleCenter = Offset(center.dx + 14, center.dy - 30 + bob);
+
+    final fill = Paint()..color = GameColors.uiGold.withValues(alpha: 0.95);
+    final stroke = Paint()
+      ..color = Colors.black.withValues(alpha: 0.25)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+
+    canvas.drawCircle(bubbleCenter, 9, fill);
+    canvas.drawCircle(bubbleCenter, 9, stroke);
+
+    final iconPainter = TextPainter(
+      text: const TextSpan(text: '🧺', style: TextStyle(fontSize: 10)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    iconPainter.paint(
+      canvas,
+      Offset(
+        bubbleCenter.dx - iconPainter.width / 2,
+        bubbleCenter.dy - iconPainter.height / 2,
+      ),
+    );
   }
 
   @override

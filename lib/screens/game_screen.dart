@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:farm_fintech/config/constants.dart';
@@ -28,6 +31,9 @@ class _GameScreenState extends State<GameScreen>
   late AnimationController _animController;
   Offset _lastFocalPoint = Offset.zero;
   double _baseScale = 1.0;
+  bool _showingMonthlyReport = false;
+  bool _wasLoanSharkThreatActive = false;
+  Timer? _threatHapticTimer;
 
   @override
   void initState() {
@@ -74,6 +80,7 @@ class _GameScreenState extends State<GameScreen>
   @override
   void dispose() {
     _animController.dispose();
+    _threatHapticTimer?.cancel();
     super.dispose();
   }
 
@@ -83,6 +90,8 @@ class _GameScreenState extends State<GameScreen>
       backgroundColor: GameColors.uiBackground,
       body: Consumer<GameState>(
         builder: (context, state, _) {
+          _scheduleMonthlyReportDialog(state);
+          _handleLoanSharkThreatEffects(state);
           return Stack(
             children: [
               // ── Layer 0: Dynamic Sky Background ──────────
@@ -142,6 +151,23 @@ class _GameScreenState extends State<GameScreen>
               // ── Layer 2: HUD Overlay ────────────────────
               const HudOverlay(),
 
+              if (state.loanSharkThreatActive)
+                IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: _animController,
+                    builder: (context, _) {
+                      final pulse =
+                          0.10 +
+                          (0.08 *
+                              (0.5 +
+                                  0.5 * (1 - (_animController.value * 6 % 2))));
+                      return Container(
+                        color: GameColors.uiRed.withValues(alpha: pulse),
+                      );
+                    },
+                  ),
+                ),
+
               // ── Layer 3: Tile Action Bar (bottom sheet) ──
               if (state.selectedTile != null) _buildTileActionBar(state),
             ],
@@ -149,6 +175,66 @@ class _GameScreenState extends State<GameScreen>
         },
       ),
     );
+  }
+
+  void _handleLoanSharkThreatEffects(GameState state) {
+    final active = state.loanSharkThreatActive;
+    if (active && !_wasLoanSharkThreatActive) {
+      HapticFeedback.heavyImpact();
+      _threatHapticTimer?.cancel();
+      _threatHapticTimer = Timer.periodic(const Duration(milliseconds: 900), (
+        timer,
+      ) {
+        if (!mounted || !state.loanSharkThreatActive) {
+          timer.cancel();
+          return;
+        }
+        HapticFeedback.mediumImpact();
+      });
+    }
+
+    if (!active && _wasLoanSharkThreatActive) {
+      _threatHapticTimer?.cancel();
+      _threatHapticTimer = null;
+    }
+    _wasLoanSharkThreatActive = active;
+  }
+
+  void _scheduleMonthlyReportDialog(GameState state) {
+    final report = state.pendingMonthlyReport;
+    if (_showingMonthlyReport || report == null || !mounted) return;
+
+    _showingMonthlyReport = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        _showingMonthlyReport = false;
+        return;
+      }
+
+      final country = state.player?.country ?? 'MY';
+      final seed = report.expenses['seed'] ?? 0;
+      final interest = report.expenses['interest'] ?? 0;
+
+      DialogPopup.show(
+        context,
+        title: 'Monthly P&L Report',
+        message:
+            'Y${report.year} M${report.month}\n\n'
+            'Income: ${CurrencyUtil.format(report.income, country)}\n'
+            'Expenses: ${CurrencyUtil.format(report.totalExpense, country)}\n'
+            'Net: ${CurrencyUtil.format(report.netProfit, country)}\n\n'
+            'Seed Cost: ${CurrencyUtil.format(seed, country)}\n'
+            'Interest & Fees: ${CurrencyUtil.format(interest, country)}\n\n'
+            'Top expense this month: ${report.topExpenseLabel}',
+        icon: Icons.assessment,
+        iconColor: GameColors.uiGold,
+        buttonText: 'Continue',
+      ).then((_) {
+        if (!mounted) return;
+        state.acknowledgeMonthlyReport();
+        _showingMonthlyReport = false;
+      });
+    });
   }
 
   /// Bottom action bar for the selected tile.
