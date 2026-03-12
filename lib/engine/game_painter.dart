@@ -62,12 +62,10 @@ class GamePainter extends CustomPainter {
 
     // ── Ground fill ──────────────────────────────────────────
     final groundColor = switch (tile.type) {
-      TileType.grass => (col + row) % 2 == 0
-          ? GameColors.grassLight
-          : GameColors.grassDark,
-      TileType.farmland => (col + row) % 2 == 0
-          ? GameColors.dirt
-          : GameColors.dirtDark,
+      TileType.grass =>
+        (col + row) % 2 == 0 ? GameColors.grassLight : GameColors.grassDark,
+      TileType.farmland =>
+        (col + row) % 2 == 0 ? GameColors.dirt : GameColors.dirtDark,
       TileType.water => GameColors.water,
       TileType.building => GameColors.dirt,
     };
@@ -100,6 +98,7 @@ class GamePainter extends CustomPainter {
     // ── Crops ────────────────────────────────────────────────
     if (tile.hasCrop) {
       SpritePainter.drawCrop(canvas, center, tile.crop!, tile.growthStage);
+      _drawCropStatusBadge(canvas, tile, center);
     }
 
     // ── Buildings (drawn at special tile positions) ──────────
@@ -114,6 +113,61 @@ class GamePainter extends CustomPainter {
         SpritePainter.drawFarmhouse(canvas, center);
       }
     }
+  }
+
+  void _drawCropStatusBadge(Canvas canvas, Tile tile, Offset center) {
+    final isReady = tile.isHarvestable;
+    final remainingDays = (3 - tile.growthStage).clamp(0, 3);
+    final label = isReady
+        ? 'READY'
+        : remainingDays == 1
+        ? 'Tomorrow'
+        : '$remainingDays DAYS';
+    final badgeColor = isReady ? GameColors.uiGold : GameColors.uiAccent;
+    final textColor = isReady ? GameColors.uiBackground : GameColors.uiText;
+
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final badgeWidth = textPainter.width + 10;
+    final badgeHeight = textPainter.height + 4;
+    final badgeRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(
+        center: Offset(center.dx, center.dy - 14),
+        width: badgeWidth,
+        height: badgeHeight,
+      ),
+      const Radius.circular(6),
+    );
+
+    canvas.drawRRect(
+      badgeRect,
+      Paint()..color = badgeColor.withValues(alpha: 0.92),
+    );
+    canvas.drawRRect(
+      badgeRect,
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.18)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.6,
+    );
+
+    textPainter.paint(
+      canvas,
+      Offset(
+        center.dx - textPainter.width / 2,
+        center.dy - 14 - textPainter.height / 2,
+      ),
+    );
   }
 
   void _drawWeatherOverlay(Canvas canvas, Size size) {

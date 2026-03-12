@@ -45,7 +45,7 @@ const Map<CropType, Map<String, dynamic>> kCropConfig = {
     'sellPrice': 30.0,
   },
   CropType.rice: {
-    'name': 'Rice',
+    'name': 'Paddy',
     'growthDays': 5,
     'seedCost': 20.0,
     'sellPrice': 60.0,
@@ -69,3 +69,7 @@ const int kMinLoanCreditScore = 600;
 
 // ─── Insurance Config ──────────────────────────────────────────
 const double kInsurancePremiumRate = 0.10; // 10% of coverage
+
+// ─── Disaster Config ───────────────────────────────────────────
+// Fallback client-side disaster roll per in-game day when API reports no disaster.
+const double kDailyDisasterChance = 0.25;

@@ -41,7 +41,7 @@ class _GameScreenState extends State<GameScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final state = context.read<GameState>();
       state.centerCamera(MediaQuery.of(context).size);
-      
+
       if (!(state.player?.tutorialCompleted ?? true)) {
         _showTutorial(state);
       }
@@ -56,9 +56,9 @@ class _GameScreenState extends State<GameScreen>
           'Welcome, farmer! Here\'s how to play:\n\n'
           '1. TAP a brown farmland tile to plant crops\n'
           '2. TAP "Next Day" ☀️ to advance time and grow crops\n'
-          '3. HARVEST mature crops to earn money\n'
+          '3. HARVEST mature crops to store in inventory\n'
           '4. Visit the BANK for loans and insurance\n'
-          '5. Use the MERCHANT for BNPL equipment\n\n'
+          '5. Use the MERCHANT market to sell crops and buy equipment\n\n'
           'Watch out for real-world weather disasters!',
       icon: Icons.agriculture,
       buttonText: 'Let\'s Farm! 🚜',
@@ -173,9 +173,7 @@ class _GameScreenState extends State<GameScreen>
               offset: const Offset(0, -2),
             ),
           ],
-          border: Border.all(
-            color: GameColors.uiAccent.withValues(alpha: 0.6),
-          ),
+          border: Border.all(color: GameColors.uiAccent.withValues(alpha: 0.6)),
         ),
         child: Row(
           children: [
@@ -196,13 +194,14 @@ class _GameScreenState extends State<GameScreen>
                   Text(
                     '${tile.crop!.name.toUpperCase()} — Stage ${tile.growthStage}/3',
                     style: const TextStyle(
-                        color: GameColors.uiGold, fontSize: 12),
+                      color: GameColors.uiGold,
+                      fontSize: 12,
+                    ),
                   ),
                 if (tile.type == TileType.grass)
                   const Text(
                     'Buy land at Bank to farm here',
-                    style:
-                        TextStyle(color: GameColors.uiTextDim, fontSize: 11),
+                    style: TextStyle(color: GameColors.uiTextDim, fontSize: 11),
                   ),
               ],
             ),
@@ -213,7 +212,11 @@ class _GameScreenState extends State<GameScreen>
             // Close button
             const SizedBox(width: 8),
             IconButton(
-              icon: const Icon(Icons.close, color: GameColors.uiTextDim, size: 18),
+              icon: const Icon(
+                Icons.close,
+                color: GameColors.uiTextDim,
+                size: 18,
+              ),
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               padding: EdgeInsets.zero,
               onPressed: () {
@@ -234,14 +237,17 @@ class _GameScreenState extends State<GameScreen>
         padding: const EdgeInsets.only(right: 6),
         child: ActionChip(
           avatar: const Icon(Icons.grass, size: 14, color: GameColors.uiGreen),
-          label: Text('${config['name']} ${CurrencyUtil.format(config['seedCost'] as double, state.player?.country ?? 'MY')}',
-              style: const TextStyle(fontSize: 11)),
+          label: Text(
+            '${config['name']} ${CurrencyUtil.format(config['seedCost'] as double, state.player?.country ?? 'MY')}',
+            style: const TextStyle(fontSize: 11),
+          ),
           backgroundColor: GameColors.uiAccent,
           labelStyle: const TextStyle(color: GameColors.uiText),
           side: BorderSide.none,
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          onPressed: () {
-            final success = state.plantCrop(crop);
+          onPressed: () async {
+            final success = await state.plantCrop(crop);
+            if (!mounted) return;
             if (!success && mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Not enough money!')),
@@ -255,18 +261,70 @@ class _GameScreenState extends State<GameScreen>
 
   Widget _buildHarvestChip(GameState state) {
     return ActionChip(
-      avatar: const Icon(Icons.agriculture, size: 14, color: GameColors.uiBackground),
-      label: const Text('HARVEST', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+      avatar: const Icon(
+        Icons.agriculture,
+        size: 14,
+        color: GameColors.uiBackground,
+      ),
+      label: const Text(
+        'HARVEST',
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+      ),
       backgroundColor: GameColors.uiGold,
       labelStyle: const TextStyle(color: GameColors.uiBackground),
       side: BorderSide.none,
-      onPressed: () {
-        final revenue = state.harvestCrop();
-        if (revenue != null && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Harvested! +${CurrencyUtil.format(revenue, state.player?.country ?? 'MY')}')),
+      onPressed: () async {
+        final harvested = await state.harvestCrop();
+        if (harvested == null || !mounted) return;
+
+        final config = kCropConfig[harvested]!;
+        final cropName = config['name'] as String;
+        final sellPrice = config['sellPrice'] as double;
+
+        final action = await showDialog<String>(
+          context: context,
+          builder: (dialogContext) {
+            return AlertDialog(
+              title: Text('$cropName Harvested'),
+              content: Text(
+                'Store it in inventory or sell it now for ${CurrencyUtil.format(sellPrice, state.player?.country ?? 'MY')}?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop('store'),
+                  child: const Text('Store'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(dialogContext).pop('sell'),
+                  child: const Text('Sell Now'),
+                ),
+              ],
+            );
+          },
+        );
+
+        if (!mounted) return;
+
+        if (action == 'sell') {
+          final revenue = await state.sellInventoryCrop(
+            harvested.name,
+            quantity: 1,
           );
+          if (!mounted || revenue == null) return;
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Sold $cropName for ${CurrencyUtil.format(revenue, state.player?.country ?? 'MY')}.',
+              ),
+            ),
+          );
+          return;
         }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Stored $cropName in inventory.')),
+        );
       },
     );
   }

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import 'package:farm_fintech/config/constants.dart';
@@ -20,6 +22,7 @@ class GameState extends ChangeNotifier {
   final CloudFunctionsService _cloud = CloudFunctionsService();
   final WeatherService _weather = WeatherService();
   final FirestoreService _firestore = FirestoreService();
+  final Random _random = Random();
 
   // ── Player ──────────────────────────────────────────────────
   Player? player;
@@ -51,31 +54,33 @@ class GameState extends ChangeNotifier {
   void _initGrid() {
     grid = List.generate(
       kGridRows,
-      (row) => List.generate(
-        kGridCols,
-        (col) {
-          // Place buildings in fixed positions
-          if (col == 0 && row == 0) {
-            return Tile(col: col, row: row, type: TileType.building);
-          }
-          if (col == 0 && row == 1) {
-            return Tile(col: col, row: row, type: TileType.building);
-          }
-          // A pond
-          if (col == 7 && row == 7) {
-            return Tile(col: col, row: row, type: TileType.water);
-          }
-          // Starting farmland (3x3 area in center)
-          if (col >= 3 && col <= 5 && row >= 3 && row <= 5) {
-            return Tile(col: col, row: row, type: TileType.farmland);
-          }
-          return Tile(col: col, row: row, type: TileType.grass);
-        },
-      ),
+      (row) => List.generate(kGridCols, (col) {
+        // Place buildings in fixed positions
+        if (col == 0 && row == 0) {
+          return Tile(col: col, row: row, type: TileType.building);
+        }
+        if (col == 0 && row == 1) {
+          return Tile(col: col, row: row, type: TileType.building);
+        }
+        // A pond
+        if (col == 7 && row == 7) {
+          return Tile(col: col, row: row, type: TileType.water);
+        }
+        // Starting farmland (3x3 area in center)
+        if (col >= 3 && col <= 5 && row >= 3 && row <= 5) {
+          return Tile(col: col, row: row, type: TileType.farmland);
+        }
+        return Tile(col: col, row: row, type: TileType.grass);
+      }),
     );
   }
 
   // ── Actions ─────────────────────────────────────────────────
+
+  Future<void> _savePlayerState() async {
+    if (player == null) return;
+    await _firestore.savePlayer(player!);
+  }
 
   /// Handle a tap on the isometric grid at screen position.
   void handleTap(Offset screenPos) {
@@ -93,7 +98,7 @@ class GameState extends ChangeNotifier {
   }
 
   /// Plant a crop on the selected tile.
-  bool plantCrop(CropType cropType) {
+  Future<bool> plantCrop(CropType cropType) async {
     if (selectedTile == null || player == null) return false;
 
     final (col, row) = selectedTile!;
@@ -108,6 +113,11 @@ class GameState extends ChangeNotifier {
 
     if (!tile.plant(cropType)) return false;
 
+    tile.plantedDay = currentDay;
+
+    final previousCashBalance = player!.cashBalance;
+    final previousBankBalance = player!.bankBalance;
+
     // Deduct cost (prefer cash first)
     if (player!.cashBalance >= cost) {
       player!.pay(cost, method: PaymentMethod.cash);
@@ -115,57 +125,140 @@ class GameState extends ChangeNotifier {
       player!.pay(cost, method: PaymentMethod.bank);
     }
 
-    notifyListeners();
-    return true;
+    try {
+      await _savePlayerState();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      tile.crop = null;
+      tile.growthStage = 0;
+      tile.plantedAt = null;
+      player!.cashBalance = previousCashBalance;
+      player!.bankBalance = previousBankBalance;
+      return false;
+    }
   }
 
-  /// Harvest the selected tile's crop.
-  double? harvestCrop() {
+  /// Harvest the selected tile's crop and add it to inventory.
+  Future<CropType?> harvestCrop() async {
     if (selectedTile == null || player == null) return null;
 
     final (col, row) = selectedTile!;
     final tile = grid[row][col];
+    final previousCrop = tile.crop;
+    final previousGrowthStage = tile.growthStage;
+    final previousPlantedAt = tile.plantedAt;
+    final previousPlantedDay = tile.plantedDay;
     final harvested = tile.harvest();
 
     if (harvested == null) return null;
 
-    final config = kCropConfig[harvested]!;
-    final revenue = config['sellPrice'] as double;
+    final key = harvested.name;
+    final previousQuantity = player!.inventory[key] ?? 0;
+    player!.inventory[key] = previousQuantity + 1;
+
+    try {
+      await _savePlayerState();
+      notifyListeners();
+      return harvested;
+    } catch (_) {
+      tile.crop = previousCrop;
+      tile.growthStage = previousGrowthStage;
+      tile.plantedAt = previousPlantedAt;
+      tile.plantedDay = previousPlantedDay;
+      if (previousQuantity > 0) {
+        player!.inventory[key] = previousQuantity;
+      } else {
+        player!.inventory.remove(key);
+      }
+      return null;
+    }
+  }
+
+  /// Sell all inventory of a crop key and deposit revenue to cash wallet.
+  Future<double?> sellInventoryCrop(String cropKey, {int? quantity}) async {
+    if (player == null) return null;
+
+    final availableQty = player!.inventory[cropKey] ?? 0;
+    if (availableQty <= 0) return null;
+
+    final qty = quantity ?? availableQty;
+    if (qty <= 0 || qty > availableQty) return null;
+
+    CropType? cropType;
+    for (final value in CropType.values) {
+      if (value.name == cropKey) {
+        cropType = value;
+        break;
+      }
+    }
+    if (cropType == null) return null;
+
+    final config = kCropConfig[cropType]!;
+    final sellPrice = config['sellPrice'] as double;
+    final revenue = sellPrice * qty;
+    final previousCashBalance = player!.cashBalance;
 
     player!.deposit(revenue, method: PaymentMethod.cash);
-    notifyListeners();
-    return revenue;
+    final remainingQty = availableQty - qty;
+    if (remainingQty > 0) {
+      player!.inventory[cropKey] = remainingQty;
+    } else {
+      player!.inventory.remove(cropKey);
+    }
+
+    try {
+      await _savePlayerState();
+      notifyListeners();
+      return revenue;
+    } catch (_) {
+      player!.cashBalance = previousCashBalance;
+      player!.inventory[cropKey] = availableQty;
+      return null;
+    }
+  }
+
+  Future<bool> buyEquipment(double amount, PaymentMethod method) async {
+    if (player == null) return false;
+
+    final previousCashBalance = player!.cashBalance;
+    final previousBankBalance = player!.bankBalance;
+    final didPay = player!.pay(amount, method: method);
+    if (!didPay) return false;
+
+    try {
+      await _savePlayerState();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      player!.cashBalance = previousCashBalance;
+      player!.bankBalance = previousBankBalance;
+      return false;
+    }
   }
 
   /// Advance the game by one day. Grows crops, checks BNPL dues via Cloud, etc.
   Future<void> advanceDay() async {
     currentDay++;
 
-    // Grow crops
+    // Grow crops based on in-game days
     for (final row in grid) {
       for (final tile in row) {
         if (tile.hasCrop && tile.growthStage < 3) {
           final config = kCropConfig[tile.crop!]!;
           final growthDays = config['growthDays'] as int;
-          final daysSincePlant = tile.plantedAt != null
-              ? DateTime.now().difference(tile.plantedAt!).inDays
+          final daysSincePlant = tile.plantedDay != null
+              ? currentDay - tile.plantedDay!
               : 0;
 
           // Simple growth: divide total growth time into 3 stages
           final stageInterval = growthDays ~/ 3;
           if (stageInterval > 0) {
-            tile.growthStage =
-                (daysSincePlant ~/ stageInterval).clamp(0, 3);
+            tile.growthStage = (daysSincePlant ~/ stageInterval).clamp(0, 3);
+          } else {
+            // If growth is less than 3 days, grow 1 stage per day
+            tile.growthStage = daysSincePlant.clamp(0, 3);
           }
-        }
-      }
-    }
-
-    // For hackathon demo: just increment growth stage directly
-    for (final row in grid) {
-      for (final tile in row) {
-        if (tile.hasCrop && tile.growthStage < 3) {
-          tile.growthStage++;
         }
       }
     }
@@ -175,17 +268,42 @@ class GameState extends ChangeNotifier {
     // Fire-and-forget server checks
     if (player != null) {
       var needsRefresh = false;
+      var disasterTriggeredToday = false;
 
       // 1. Weather Check
-      final weatherResult = await _weather.checkWeather(player!.gpsLat, player!.gpsLng);
+      final weatherResult = await _weather.checkWeather(
+        player!.gpsLat,
+        player!.gpsLng,
+      );
       if (weatherResult.hasDisaster && weatherResult.disasterType != null) {
         DisasterType type = DisasterType.none;
         // The Cloud Function returns string IDs like 'flood', 'storm', 'drought'
-        if (weatherResult.disasterType == 'flood') type = DisasterType.flood;
-        if (weatherResult.disasterType == 'storm') type = DisasterType.storm;
-        if (weatherResult.disasterType == 'drought') type = DisasterType.drought;
+        if (weatherResult.disasterType == 'flood') {
+          type = DisasterType.flood;
+        }
+        if (weatherResult.disasterType == 'storm') {
+          type = DisasterType.storm;
+        }
+        if (weatherResult.disasterType == 'drought') {
+          type = DisasterType.drought;
+        }
         triggerDisaster(type);
+        disasterTriggeredToday = true;
       } else {
+        // Daily fallback probability: if weather API has no disaster, roll one locally.
+        if (_random.nextDouble() < kDailyDisasterChance) {
+          final rolled = [
+            DisasterType.flood,
+            DisasterType.storm,
+            DisasterType.drought,
+          ];
+          final randomType = rolled[_random.nextInt(rolled.length)];
+          triggerDisaster(randomType);
+          disasterTriggeredToday = true;
+        }
+      }
+
+      if (!disasterTriggeredToday) {
         clearDisaster();
       }
 
@@ -195,7 +313,7 @@ class GameState extends ChangeNotifier {
           final result = await _cloud.calculateBnplPenalty(plan.id);
           // If a penalty was applied or defaulted, it modified the user wallet in Firestore
           if (result['penalty'] != null && result['penalty'] > 0) {
-             needsRefresh = true;
+            needsRefresh = true;
           }
         }
       }

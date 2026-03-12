@@ -8,6 +8,7 @@ class Tile {
   CropType? crop;
   int growthStage; // 0=seed, 1=sprout, 2=growing, 3=harvestable
   DateTime? plantedAt;
+  int? plantedDay; // In-game day when crop was planted
   bool insured;
 
   Tile({
@@ -17,6 +18,7 @@ class Tile {
     this.crop,
     this.growthStage = 0,
     this.plantedAt,
+    this.plantedDay,
     this.insured = false,
   });
 
@@ -41,6 +43,7 @@ class Tile {
     crop = null;
     growthStage = 0;
     plantedAt = null;
+    plantedDay = null;
     return harvested;
   }
 
@@ -49,37 +52,35 @@ class Tile {
     crop = null;
     growthStage = 0;
     plantedAt = null;
+    plantedDay = null;
   }
 
   /// Convert to/from Firestore map.
   Map<String, dynamic> toMap() => {
-        'col': col,
-        'row': row,
-        'type': type.name,
-        'crop': crop?.name,
-        'growthStage': growthStage,
-        'plantedAt': plantedAt?.millisecondsSinceEpoch,
-        'insured': insured,
-      };
+    'col': col,
+    'row': row,
+    'type': type.name,
+    'crop': crop?.name,
+    'growthStage': growthStage,
+    'plantedAt': plantedAt?.millisecondsSinceEpoch,
+    'plantedDay': plantedDay,
+    'insured': insured,
+  };
 
   factory Tile.fromMap(Map<String, dynamic> map) => Tile(
-        col: map['col'] as int,
-        row: map['row'] as int,
-        type: TileType.values.byName(map['type'] as String),
-        crop: map['crop'] != null
-            ? CropType.values.byName(map['crop'] as String)
-            : null,
-        growthStage: map['growthStage'] as int? ?? 0,
-        plantedAt: map['plantedAt'] != null
-            ? DateTime.fromMillisecondsSinceEpoch(map['plantedAt'] as int)
-            : null,
-        insured: map['insured'] as bool? ?? false,
-      );
+    col: map['col'] as int,
+    row: map['row'] as int,
+    type: TileType.values.byName(map['type'] as String),
+    crop: map['crop'] != null
+        ? CropType.values.byName(map['crop'] as String)
+        : null,
+    growthStage: map['growthStage'] as int? ?? 0,
+    plantedAt: map['plantedAt'] != null
+        ? DateTime.fromMillisecondsSinceEpoch(map['plantedAt'] as int)
+        : null,
+    plantedDay: map['plantedDay'] as int?,
+    insured: map['insured'] as bool? ?? false,
+  );
 }
 
-enum TileType {
-  grass,
-  farmland,
-  water,
-  building,
-}
+enum TileType { grass, farmland, water, building }

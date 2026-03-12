@@ -17,6 +17,9 @@ class Player {
   // Credit
   int creditScore;
 
+  // Inventory: crop key -> quantity (e.g. {'wheat': 5})
+  Map<String, int> inventory;
+
   Player({
     required this.uid,
     required this.displayName,
@@ -30,9 +33,15 @@ class Player {
     this.bankBalance = 0,
     this.bankRegistered = false,
     this.creditScore = 500,
-  }) : createdAt = createdAt ?? DateTime.now();
+    Map<String, int>? inventory,
+  }) : inventory = Map<String, int>.from(inventory ?? {}),
+       createdAt = createdAt ?? DateTime.now();
 
-  double get totalNetWorth => cashBalance + bankBalance; // minus debts added later
+  double get totalNetWorth =>
+      cashBalance + bankBalance; // minus debts added later
+
+  int get totalInventoryItems =>
+      inventory.values.fold(0, (sum, quantity) => sum + quantity);
 
   /// Pay from the specified method. Returns true if sufficient balance.
   bool pay(double amount, {required PaymentMethod method}) {
@@ -60,35 +69,41 @@ class Player {
   }
 
   Map<String, dynamic> toMap() => {
-        'displayName': displayName,
-        'country': country,
-        'currency': currency,
-        'gpsLat': gpsLat,
-        'gpsLng': gpsLng,
-        'tutorialCompleted': tutorialCompleted,
-        'createdAt': createdAt.millisecondsSinceEpoch,
-        'cashBalance': cashBalance,
-        'bankBalance': bankBalance,
-        'bankRegistered': bankRegistered,
-        'creditScore': creditScore,
-      };
+    'displayName': displayName,
+    'country': country,
+    'currency': currency,
+    'gpsLat': gpsLat,
+    'gpsLng': gpsLng,
+    'tutorialCompleted': tutorialCompleted,
+    'createdAt': createdAt.millisecondsSinceEpoch,
+    'cashBalance': cashBalance,
+    'bankBalance': bankBalance,
+    'bankRegistered': bankRegistered,
+    'creditScore': creditScore,
+    'inventory': inventory,
+  };
 
   factory Player.fromMap(String uid, Map<String, dynamic> map) => Player(
-        uid: uid,
-        displayName: map['displayName'] as String? ?? '',
-        country: map['country'] as String? ?? 'MY',
-        currency: map['currency'] as String? ?? 'XMYR',
-        gpsLat: (map['gpsLat'] as num?)?.toDouble() ?? 0,
-        gpsLng: (map['gpsLng'] as num?)?.toDouble() ?? 0,
-        tutorialCompleted: map['tutorialCompleted'] as bool? ?? false,
-        createdAt: map['createdAt'] != null
-            ? DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int)
-            : null,
-        cashBalance: (map['cashBalance'] as num?)?.toDouble() ?? 1000.0,
-        bankBalance: (map['bankBalance'] as num?)?.toDouble() ?? 0,
-        bankRegistered: map['bankRegistered'] as bool? ?? false,
-        creditScore: map['creditScore'] as int? ?? 500,
-      );
+    uid: uid,
+    displayName: map['displayName'] as String? ?? '',
+    country: map['country'] as String? ?? 'MY',
+    currency: map['currency'] as String? ?? 'XMYR',
+    gpsLat: (map['gpsLat'] as num?)?.toDouble() ?? 0,
+    gpsLng: (map['gpsLng'] as num?)?.toDouble() ?? 0,
+    tutorialCompleted: map['tutorialCompleted'] as bool? ?? false,
+    createdAt: map['createdAt'] != null
+        ? DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int)
+        : null,
+    cashBalance: (map['cashBalance'] as num?)?.toDouble() ?? 1000.0,
+    bankBalance: (map['bankBalance'] as num?)?.toDouble() ?? 0,
+    bankRegistered: map['bankRegistered'] as bool? ?? false,
+    creditScore: map['creditScore'] as int? ?? 500,
+    inventory:
+        (map['inventory'] as Map<String, dynamic>?)?.map(
+          (key, value) => MapEntry(key, (value as num?)?.toInt() ?? 0),
+        ) ??
+        {},
+  );
 }
 
 enum PaymentMethod { cash, bank }

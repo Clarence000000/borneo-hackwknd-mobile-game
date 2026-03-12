@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/providers/game_state.dart';
+import 'package:farm_fintech/models/weather_event.dart';
 import 'package:farm_fintech/screens/bank_screen.dart';
 import 'package:farm_fintech/screens/profile_screen.dart';
 import 'package:farm_fintech/screens/merchant_screen.dart';
@@ -80,7 +81,10 @@ class HudOverlay extends StatelessWidget {
                     // Cash badge
                     _HudBadge(
                       icon: Icons.monetization_on,
-                      label: CurrencyUtil.format(player.cashBalance, player.country),
+                      label: CurrencyUtil.format(
+                        player.cashBalance,
+                        player.country,
+                      ),
                       color: GameColors.uiGold,
                     ),
                     const SizedBox(width: 6),
@@ -89,7 +93,10 @@ class HudOverlay extends StatelessWidget {
                     if (player.bankRegistered) ...[
                       _HudBadge(
                         icon: Icons.account_balance,
-                        label: CurrencyUtil.format(player.bankBalance, player.country),
+                        label: CurrencyUtil.format(
+                          player.bankBalance,
+                          player.country,
+                        ),
                         color: GameColors.uiGreen,
                       ),
                       const SizedBox(width: 6),
@@ -97,6 +104,13 @@ class HudOverlay extends StatelessWidget {
 
                     // Credit score badge
                     _CreditScoreBadge(score: player.creditScore),
+                    const SizedBox(width: 6),
+
+                    _HudBadge(
+                      icon: Icons.inventory_2,
+                      label: '${player.totalInventoryItems}',
+                      color: GameColors.uiAccent,
+                    ),
 
                     const Spacer(),
 
@@ -156,6 +170,55 @@ class HudOverlay extends StatelessWidget {
                             MaterialPageRoute(
                               builder: (_) => const MerchantScreen(),
                             ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 6),
+                      _HudActionButton(
+                        icon: Icons.warning_amber,
+                        tooltip: 'Simulate Disaster',
+                        color: Colors.orange,
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (_) {
+                              return AlertDialog(
+                                title: const Text('Simulate Disaster'),
+                                content: const Text(
+                                  'Choose a disaster to trigger immediately.',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () {
+                                      state.triggerDisaster(DisasterType.flood);
+                                      Navigator.of(context).pop();
+                                    },
+                                    child: const Text('Flood'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      state.triggerDisaster(DisasterType.storm);
+                                      Navigator.of(context).pop();
+                                    },
+                                    child: const Text('Storm'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      state.triggerDisaster(
+                                        DisasterType.drought,
+                                      );
+                                      Navigator.of(context).pop();
+                                    },
+                                    child: const Text('Drought'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.of(context).pop(),
+                                    child: const Text('Cancel'),
+                                  ),
+                                ],
+                              );
+                            },
                           );
                         },
                       ),
