@@ -1,4 +1,5 @@
 import * as functions from "firebase-functions";
+import { CallableRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -14,7 +15,7 @@ const INTEREST_RATE = 0.05; // 5% monthly interest
  * Credit Score. If approved, creates the loan and deposits funds.
  */
 export const evaluateLoan = functions.https.onCall(
-    async (request) => {
+    async (request: CallableRequest<any>) => {
         const uid = request.auth?.uid;
         if (!uid) throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
 

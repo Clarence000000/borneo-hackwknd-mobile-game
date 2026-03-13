@@ -25,6 +25,11 @@ class Player {
   // Inventory: crop key -> quantity (e.g. {'wheat': 5})
   Map<String, int> inventory;
 
+  // Game Day Persistence
+  int currentDay;
+  int manualNextDayUsedToday;
+  DateTime manualNextDayUsageDate;
+
   Player({
     required this.uid,
     required this.displayName,
@@ -42,8 +47,12 @@ class Player {
     this.autoHarvestEnabled = false,
     this.fertilizerPackCount = 0,
     Map<String, int>? inventory,
+    this.currentDay = 1,
+    this.manualNextDayUsedToday = 0,
+    DateTime? manualNextDayUsageDate,
   }) : inventory = Map<String, int>.from(inventory ?? {}),
-       createdAt = createdAt ?? DateTime.now();
+       createdAt = createdAt ?? DateTime.now(),
+       manualNextDayUsageDate = manualNextDayUsageDate ?? DateTime.now();
 
   double get totalNetWorth =>
       cashBalance + bankBalance; // minus debts added later
@@ -92,6 +101,9 @@ class Player {
     'autoHarvestEnabled': autoHarvestEnabled,
     'fertilizerPackCount': fertilizerPackCount,
     'inventory': inventory,
+    'currentDay': currentDay,
+    'manualNextDayUsedToday': manualNextDayUsedToday,
+    'manualNextDayUsageDate': manualNextDayUsageDate.millisecondsSinceEpoch,
   };
 
   factory Player.fromMap(String uid, Map<String, dynamic> map) => Player(
@@ -117,6 +129,11 @@ class Player {
           (key, value) => MapEntry(key, (value as num?)?.toInt() ?? 0),
         ) ??
         {},
+    currentDay: (map['currentDay'] as int?) ?? 1,
+    manualNextDayUsedToday: (map['manualNextDayUsedToday'] as int?) ?? 0,
+    manualNextDayUsageDate: map['manualNextDayUsageDate'] != null
+        ? DateTime.fromMillisecondsSinceEpoch(map['manualNextDayUsageDate'] as int)
+        : null,
   );
 }
 

@@ -96,14 +96,15 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.agriculture, color: GameColors.uiGold, size: 60),
+                Image.asset('assets/images/logo.png', height: 100),
                 const SizedBox(height: 16),
                 const Text(
-                  'Farm FinTech',
+                  'Richi Farm',
                   style: TextStyle(
-                    fontSize: 28,
+                    fontSize: 32,
                     fontWeight: FontWeight.bold,
                     color: GameColors.uiText,
+                    letterSpacing: 1.2,
                   ),
                 ),
                 const SizedBox(height: 32),

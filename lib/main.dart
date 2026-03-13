@@ -44,7 +44,7 @@ class FarmFintechApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (_) => GameState(),
       child: MaterialApp(
-        title: 'Farm FinTech',
+        title: 'Richi Farm',
         debugShowCheckedModeBanner: false,
         theme: GameTheme.darkTheme,
         home: const _EntryPoint(),
@@ -96,7 +96,7 @@ class _EntryPoint extends StatelessWidget {
 
             // Set provider state and route to Game
             WidgetsBinding.instance.addPostFrameCallback((_) {
-               context.read<GameState>().player = player;
+               context.read<GameState>().setPlayer(player);
             });
             return const GameScreen();
           },

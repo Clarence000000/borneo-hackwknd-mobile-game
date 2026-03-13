@@ -1,4 +1,5 @@
 import * as functions from "firebase-functions";
+import { CallableRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -127,7 +128,7 @@ async function applyInstallmentPayment(
 }
 
 export const repayBnplInstallment = functions.https.onCall(
-    async (request) => {
+    async (request: CallableRequest<any>) => {
         const uid = request.auth?.uid;
         if (!uid) throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
 
@@ -170,7 +171,7 @@ export const repayBnplInstallment = functions.https.onCall(
  * Applies realistic penalty charges to teach the dangers of BNPL debt traps.
  */
 export const calculateBnplPenalty = functions.https.onCall(
-    async (request) => {
+    async (request: CallableRequest<any>) => {
         const uid = request.auth?.uid;
         if (!uid) throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
 

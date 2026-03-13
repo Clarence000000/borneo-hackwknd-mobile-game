@@ -45,4 +45,12 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Node dependencies
+node_modules/
+cloud_functions/node_modules/
+
+# Cloud Functions compiled JS
+cloud_functions/lib/
+
+
 
