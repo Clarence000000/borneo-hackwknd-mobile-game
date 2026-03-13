@@ -20,6 +20,9 @@
 ## Report Link
 (https://drive.google.com/drive/folders/1aIHVA0aeb2QwFmt8FF7c-_yo1ECLOZ5_?usp=drive_link)
 
+## Video Link(Demo)
+(https://youtu.be/ZxOic50Z5O8?si=uk1iM3OxwuQeh0-l)
+
 ## 📖 Project Description
 
 **Richi Farm** is an innovative mobile game designed for the BorneoHack Hackathon. It merges the addictive loop of an isometric farming simulator with real-world financial education. Players take on the role of a farmer in the ASEAN region, managing a farm while navigating complex financial instruments.
