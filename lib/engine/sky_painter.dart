@@ -48,6 +48,7 @@ class SkyPainter extends CustomPainter {
     }
 
     // Draw ground horizon line
+    _drawDistantGround(canvas, size);
     _drawGroundGradient(canvas, size);
   }
 
@@ -253,23 +254,52 @@ class SkyPainter extends CustomPainter {
 
   // ─── Ground horizon gradient ──────────────────────────────
 
+  void _drawDistantGround(Canvas canvas, Size size) {
+    final horizonY = size.height * 0.7;
+    final paint = Paint()
+      ..color = weather == DisasterType.drought
+          ? const Color(0xFF8B6B4A) // Dusty brown
+          : const Color(0xFF2E5A2E); // Darker green
+
+    // Distant mountain-like silhouettes for depth
+    final path = Path()
+      ..moveTo(0, horizonY)
+      ..lineTo(size.width * 0.2, horizonY - 15)
+      ..lineTo(size.width * 0.4, horizonY - 5)
+      ..lineTo(size.width * 0.7, horizonY - 20)
+      ..lineTo(size.width, horizonY)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+
+    canvas.drawPath(path, paint);
+  }
+
   void _drawGroundGradient(Canvas canvas, Size size) {
+    final horizonY = size.height * 0.7;
     final groundGradient = LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
       colors: [
-        Colors.transparent,
-        weather == DisasterType.drought
-            ? const Color(0x33A67C52)
-            : const Color(0x224CAF50),
+        Colors.black.withValues(alpha: 0.1),
+        Colors.black.withValues(alpha: 0.4),
       ],
     );
 
     canvas.drawRect(
-      Rect.fromLTWH(0, size.height * 0.7, size.width, size.height * 0.3),
+      Rect.fromLTWH(0, horizonY, size.width, size.height - horizonY),
       Paint()..shader = groundGradient.createShader(
-        Rect.fromLTWH(0, size.height * 0.7, size.width, size.height * 0.3),
+        Rect.fromLTWH(0, horizonY, size.width, size.height - horizonY),
       ),
+    );
+
+    // Explicit horizon line
+    canvas.drawLine(
+      Offset(0, horizonY),
+      Offset(size.width, horizonY),
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.3)
+        ..strokeWidth = 2,
     );
   }
 

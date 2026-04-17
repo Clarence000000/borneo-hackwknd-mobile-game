@@ -81,389 +81,413 @@ class _HudOverlayState extends State<HudOverlay> {
             child: Column(
               children: [
                 // ── Top Bar (full width, landscape) ────────────
-                Row(
-                  children: [
-                    // Player profile chip
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const ProfileScreen(),
+                SizedBox(
+                  height: 36,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Player profile chip
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const ProfileScreen(),
+                              ),
+                            );
+                          },
+                          child: _HudChip(
+                            children: [
+                              Text(
+                                _countryFlags[player.country] ?? '🌏',
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                player.displayName,
+                                style: const TextStyle(
+                                  color: GameColors.uiText,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ),
-                        );
-                      },
-                      child: _HudChip(
-                        children: [
-                          Text(
-                            _countryFlags[player.country] ?? '🌏',
-                            style: const TextStyle(fontSize: 16),
+                        ),
+                        const SizedBox(width: 6),
+
+                        // Cash badge
+                        _HudBadge(
+                          icon: Icons.monetization_on,
+                          label:
+                              CurrencyUtil.format(displayCash, displayCountry),
+                          color: GameColors.uiGold,
+                        ),
+                        const SizedBox(width: 6),
+
+                        // Bank badge (if registered)
+                        if (player.bankRegistered) ...[
+                          _HudBadge(
+                            icon: Icons.account_balance,
+                            label: CurrencyUtil.format(
+                              displayBank,
+                              displayCountry,
+                            ),
+                            color: GameColors.uiGreen,
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            player.displayName,
-                            style: const TextStyle(
-                              color: GameColors.uiText,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
                         ],
-                      ),
-                    ),
-                    const SizedBox(width: 6),
 
-                    // Cash badge
-                    _HudBadge(
-                      icon: Icons.monetization_on,
-                      label: CurrencyUtil.format(displayCash, displayCountry),
-                      color: GameColors.uiGold,
-                    ),
-                    const SizedBox(width: 6),
-
-                    // Bank badge (if registered)
-                    if (player.bankRegistered) ...[
-                      _HudBadge(
-                        icon: Icons.account_balance,
-                        label: CurrencyUtil.format(displayBank, displayCountry),
-                        color: GameColors.uiGreen,
-                      ),
-                      const SizedBox(width: 6),
-                    ],
-
-                    GestureDetector(
-                      onTap: () {
-                        final currentIndex = _aseanCountries.indexOf(
-                          displayCountry,
-                        );
-                        final nextIndex =
-                            (currentIndex + 1) % _aseanCountries.length;
-                        setState(() {
-                          _displayCountry = _aseanCountries[nextIndex];
-                        });
-                      },
-                      child: _HudChip(
-                        children: [
-                          Text(
-                            _countryFlags[displayCountry] ?? '🌏',
-                            style: const TextStyle(fontSize: 15),
+                        GestureDetector(
+                          onTap: () {
+                            final currentIndex = _aseanCountries.indexOf(
+                              displayCountry,
+                            );
+                            final nextIndex =
+                                (currentIndex + 1) % _aseanCountries.length;
+                            setState(() {
+                              _displayCountry = _aseanCountries[nextIndex];
+                            });
+                          },
+                          child: _HudChip(
+                            children: [
+                              Text(
+                                _countryFlags[displayCountry] ?? '🌏',
+                                style: const TextStyle(fontSize: 15),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                displayCountry,
+                                style: const TextStyle(
+                                  color: GameColors.uiText,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            displayCountry,
-                            style: const TextStyle(
-                              color: GameColors.uiText,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 6),
+
+                        // Credit score badge
+                        _CreditScoreBadge(score: player.creditScore),
+                        const SizedBox(width: 6),
+
+                        _HudBadge(
+                           icon: Icons.inventory_2,
+                           label: '${player.totalInventoryItems}',
+                           color: GameColors.uiAccent,
+                        ),
+                        const SizedBox(width: 6),
+
+                        _HudBadge(
+                          icon: Icons.science,
+                          label: 'Fert ${state.fertilizerPackCount}',
+                          color: state.fertilizerPackCount > 0
+                              ? GameColors.uiHighlight
+                              : GameColors.uiTextDim,
+                        ),
+                        const SizedBox(width: 6),
+
+                        _HudBadge(
+                          icon: Icons.agriculture,
+                          label: state.tractorOwned
+                              ? (state.autoHarvestEnabled
+                                  ? 'Tractor Active'
+                                  : 'Tractor Paused')
+                              : 'No Tractor',
+                          color: state.tractorOwned
+                              ? (state.autoHarvestEnabled
+                                  ? GameColors.uiGreen
+                                  : GameColors.uiGold)
+                              : GameColors.uiTextDim,
+                        ),
+
+                        const SizedBox(width: 12),
+
+                        // Weather indicator
+                        _HudBadge(
+                          icon: _weatherIcon(state.activeDisaster),
+                          label: _weatherLabel(state.activeDisaster),
+                          color: _weatherColor(state.activeDisaster),
+                        ),
+                        const SizedBox(width: 6),
+
+                        _HudBadge(
+                          icon: state.isDaytime
+                              ? Icons.wb_sunny
+                              : Icons.nightlight_round,
+                          label:
+                              '${state.dayPhaseLabel} ${_formatCountdown(state.remainingCycleSeconds)}',
+                          color: state.isDaytime
+                              ? GameColors.uiGold
+                              : GameColors.uiAccent,
+                        ),
+                        const SizedBox(width: 6),
+
+                        // Day counter
+                        _HudBadge(
+                          icon: Icons.wb_sunny,
+                          label: state.gameDateLabel,
+                          color: GameColors.uiHighlight,
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 6),
-
-                    // Credit score badge
-                    _CreditScoreBadge(score: player.creditScore),
-                    const SizedBox(width: 6),
-
-                    _HudBadge(
-                      icon: Icons.inventory_2,
-                      label: '${player.totalInventoryItems}',
-                      color: GameColors.uiAccent,
-                    ),
-                    const SizedBox(width: 6),
-
-                    _HudBadge(
-                      icon: Icons.science,
-                      label: 'Fert ${state.fertilizerPackCount}',
-                      color: state.fertilizerPackCount > 0
-                          ? GameColors.uiHighlight
-                          : GameColors.uiTextDim,
-                    ),
-                    const SizedBox(width: 6),
-
-                    _HudBadge(
-                      icon: Icons.agriculture,
-                      label: state.tractorOwned
-                          ? (state.autoHarvestEnabled
-                                ? 'Tractor Active'
-                                : 'Tractor Paused')
-                          : 'No Tractor',
-                      color: state.tractorOwned
-                          ? (state.autoHarvestEnabled
-                                ? GameColors.uiGreen
-                                : GameColors.uiGold)
-                          : GameColors.uiTextDim,
-                    ),
-
-                    const Spacer(),
-
-                    // Weather indicator
-                    _HudBadge(
-                      icon: _weatherIcon(state.activeDisaster),
-                      label: _weatherLabel(state.activeDisaster),
-                      color: _weatherColor(state.activeDisaster),
-                    ),
-                    const SizedBox(width: 6),
-
-                    _HudBadge(
-                      icon: state.isDaytime
-                          ? Icons.wb_sunny
-                          : Icons.nightlight_round,
-                      label:
-                          '${state.dayPhaseLabel} ${_formatCountdown(state.remainingCycleSeconds)}',
-                      color: state.isDaytime
-                          ? GameColors.uiGold
-                          : GameColors.uiAccent,
-                    ),
-                    const SizedBox(width: 6),
-
-                    // Day counter
-                    _HudBadge(
-                      icon: Icons.wb_sunny,
-                      label: state.gameDateLabel,
-                      color: GameColors.uiHighlight,
-                    ),
-                  ],
+                  ),
                 ),
 
                 const Spacer(),
 
                 // ── Right-side action buttons (vertical column) ─
-                Align(
-                  alignment: Alignment.bottomRight,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _HudChip(
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.bottomRight,
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            'Free ${state.freeNextDayRemaining}/$kFreeManualNextDayPerRealDay',
-                            style: const TextStyle(
-                              color: GameColors.uiText,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 11,
-                            ),
+                          _HudChip(
+                            children: [
+                              Text(
+                                'Free ${state.freeNextDayRemaining}/$kFreeManualNextDayPerRealDay',
+                                style: const TextStyle(
+                                  color: GameColors.uiText,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Then ${kManualNextDayCost.toStringAsFixed(0)}',
+                                style: const TextStyle(
+                                  color: GameColors.uiGold,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Then ${kManualNextDayCost.toStringAsFixed(0)}',
-                            style: const TextStyle(
-                              color: GameColors.uiGold,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 11,
+                          const SizedBox(height: 6),
+                          _HudActionButton(
+                            icon: Icons.skip_next,
+                            tooltip: 'Next Day',
+                            color: GameColors.uiHighlight,
+                            onPressed: () {
+                              state.advanceDay().then((ok) {
+                                if (!ok && context.mounted) {
+                                  final messenger =
+                                      ScaffoldMessenger.of(context);
+                                  messenger
+                                    ..hideCurrentSnackBar()
+                                    ..clearSnackBars();
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      duration: const Duration(seconds: 2),
+                                      behavior: SnackBarBehavior.floating,
+                                      showCloseIcon: true,
+                                      dismissDirection: DismissDirection.down,
+                                      content: Text(
+                                        'No free Next Day left today. Need ${kManualNextDayCost.toStringAsFixed(0)} currency.',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 6),
+                          if (state.tractorOwned) ...[
+                            _HudActionButton(
+                              icon: state.autoHarvestEnabled
+                                  ? Icons.agriculture
+                                  : Icons.agriculture_outlined,
+                              tooltip: state.autoHarvestEnabled
+                                  ? 'Disable Auto Harvest'
+                                  : 'Enable Auto Harvest',
+                              color: state.autoHarvestEnabled
+                                  ? GameColors.uiGreen
+                                  : GameColors.uiGold,
+                              onPressed: () {
+                                final target = !state.autoHarvestEnabled;
+                                state.setAutoHarvestEnabled(target).then((ok) {
+                                  if (!ok || !context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      duration: const Duration(seconds: 1),
+                                      content: Text(
+                                        target
+                                            ? 'Auto harvest enabled.'
+                                            : 'Auto harvest paused.',
+                                      ),
+                                    ),
+                                  );
+                                });
+                              },
                             ),
+                            const SizedBox(height: 6),
+                          ],
+                          _HudActionButton(
+                            icon: Icons.science,
+                            tooltip: 'Use Fertilizer Pack',
+                            color: state.fertilizerPackCount > 0
+                                ? GameColors.uiHighlight
+                                : GameColors.uiTextDim,
+                            onPressed: () {
+                              state.useFertilizerPack().then((boostedCount) {
+                                if (!context.mounted) return;
+                                final messenger = ScaffoldMessenger.of(context);
+                                messenger
+                                  ..hideCurrentSnackBar()
+                                  ..clearSnackBars();
+
+                                if (boostedCount > 0) {
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      duration: const Duration(seconds: 2),
+                                      behavior: SnackBarBehavior.floating,
+                                      showCloseIcon: true,
+                                      dismissDirection: DismissDirection.down,
+                                      content: Text(
+                                        'Used 1 Fertilizer Pack. Boosted $boostedCount crops by +1 stage.',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                if (boostedCount == 0) {
+                                  messenger.showSnackBar(
+                                    const SnackBar(
+                                      duration: Duration(seconds: 2),
+                                      behavior: SnackBarBehavior.floating,
+                                      showCloseIcon: true,
+                                      dismissDirection: DismissDirection.down,
+                                      content: Text(
+                                        'No growing crops to fertilize right now.',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                messenger.showSnackBar(
+                                  const SnackBar(
+                                    duration: Duration(seconds: 2),
+                                    behavior: SnackBarBehavior.floating,
+                                    showCloseIcon: true,
+                                    dismissDirection: DismissDirection.down,
+                                    content: Text(
+                                      'No Fertilizer Pack available or use failed.',
+                                    ),
+                                  ),
+                                );
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 6),
+                          _HudActionButton(
+                            icon: Icons.account_balance,
+                            tooltip: 'Bank',
+                            color: GameColors.uiGreen,
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const BankScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 6),
+                          _HudActionButton(
+                            icon: Icons.shopping_cart,
+                            tooltip: 'Merchant',
+                            color: GameColors.uiGold,
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const MerchantScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 6),
+                          _HudActionButton(
+                            icon: Icons.warning_amber,
+                            tooltip: 'Simulate Disaster',
+                            color: Colors.orange,
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (_) {
+                                  return AlertDialog(
+                                    title: const Text('Simulate Disaster'),
+                                    content: const Text(
+                                      'Choose a disaster to trigger immediately.',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () {
+                                          state.triggerDisaster(
+                                            DisasterType.flood,
+                                          );
+                                          Navigator.of(context).pop();
+                                        },
+                                        child: const Text('Flood'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () {
+                                          state.triggerDisaster(
+                                            DisasterType.storm,
+                                          );
+                                          Navigator.of(context).pop();
+                                        },
+                                        child: const Text('Storm'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () {
+                                          state.triggerDisaster(
+                                            DisasterType.drought,
+                                          );
+                                          Navigator.of(context).pop();
+                                        },
+                                        child: const Text('Drought'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(),
+                                        child: const Text('Cancel'),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 6),
+                          _HudActionButton(
+                            icon: Icons.leaderboard,
+                            tooltip: 'Leaderboard',
+                            color: Colors.amber,
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => LeaderboardScreen(
+                                    player: player,
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      _HudActionButton(
-                        icon: Icons.skip_next,
-                        tooltip: 'Next Day',
-                        color: GameColors.uiHighlight,
-                        onPressed: () {
-                          state.advanceDay().then((ok) {
-                            if (!ok && context.mounted) {
-                              final messenger = ScaffoldMessenger.of(context);
-                              messenger
-                                ..hideCurrentSnackBar()
-                                ..clearSnackBars();
-                              messenger.showSnackBar(
-                                SnackBar(
-                                  duration: const Duration(seconds: 2),
-                                  behavior: SnackBarBehavior.floating,
-                                  showCloseIcon: true,
-                                  dismissDirection: DismissDirection.down,
-                                  content: Text(
-                                    'No free Next Day left today. Need ${kManualNextDayCost.toStringAsFixed(0)} currency.',
-                                  ),
-                                ),
-                              );
-                            }
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 6),
-                      if (state.tractorOwned) ...[
-                        _HudActionButton(
-                          icon: state.autoHarvestEnabled
-                              ? Icons.agriculture
-                              : Icons.agriculture_outlined,
-                          tooltip: state.autoHarvestEnabled
-                              ? 'Disable Auto Harvest'
-                              : 'Enable Auto Harvest',
-                          color: state.autoHarvestEnabled
-                              ? GameColors.uiGreen
-                              : GameColors.uiGold,
-                          onPressed: () {
-                            final target = !state.autoHarvestEnabled;
-                            state.setAutoHarvestEnabled(target).then((ok) {
-                              if (!ok || !context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  duration: const Duration(seconds: 1),
-                                  content: Text(
-                                    target
-                                        ? 'Auto harvest enabled.'
-                                        : 'Auto harvest paused.',
-                                  ),
-                                ),
-                              );
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 6),
-                      ],
-                      _HudActionButton(
-                        icon: Icons.science,
-                        tooltip: 'Use Fertilizer Pack',
-                        color: state.fertilizerPackCount > 0
-                            ? GameColors.uiHighlight
-                            : GameColors.uiTextDim,
-                        onPressed: () {
-                          state.useFertilizerPack().then((boostedCount) {
-                            if (!context.mounted) return;
-                            final messenger = ScaffoldMessenger.of(context);
-                            messenger
-                              ..hideCurrentSnackBar()
-                              ..clearSnackBars();
-
-                            if (boostedCount > 0) {
-                              messenger.showSnackBar(
-                                SnackBar(
-                                  duration: const Duration(seconds: 2),
-                                  behavior: SnackBarBehavior.floating,
-                                  showCloseIcon: true,
-                                  dismissDirection: DismissDirection.down,
-                                  content: Text(
-                                    'Used 1 Fertilizer Pack. Boosted $boostedCount crops by +1 stage.',
-                                  ),
-                                ),
-                              );
-                              return;
-                            }
-
-                            if (boostedCount == 0) {
-                              messenger.showSnackBar(
-                                const SnackBar(
-                                  duration: Duration(seconds: 2),
-                                  behavior: SnackBarBehavior.floating,
-                                  showCloseIcon: true,
-                                  dismissDirection: DismissDirection.down,
-                                  content: Text(
-                                    'No growing crops to fertilize right now.',
-                                  ),
-                                ),
-                              );
-                              return;
-                            }
-
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                duration: Duration(seconds: 2),
-                                behavior: SnackBarBehavior.floating,
-                                showCloseIcon: true,
-                                dismissDirection: DismissDirection.down,
-                                content: Text(
-                                  'No Fertilizer Pack available or use failed.',
-                                ),
-                              ),
-                            );
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 6),
-                      _HudActionButton(
-                        icon: Icons.account_balance,
-                        tooltip: 'Bank',
-                        color: GameColors.uiGreen,
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const BankScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 6),
-                      _HudActionButton(
-                        icon: Icons.shopping_cart,
-                        tooltip: 'Merchant',
-                        color: GameColors.uiGold,
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const MerchantScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 6),
-                      _HudActionButton(
-                        icon: Icons.warning_amber,
-                        tooltip: 'Simulate Disaster',
-                        color: Colors.orange,
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (_) {
-                              return AlertDialog(
-                                title: const Text('Simulate Disaster'),
-                                content: const Text(
-                                  'Choose a disaster to trigger immediately.',
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () {
-                                      state.triggerDisaster(DisasterType.flood);
-                                      Navigator.of(context).pop();
-                                    },
-                                    child: const Text('Flood'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () {
-                                      state.triggerDisaster(DisasterType.storm);
-                                      Navigator.of(context).pop();
-                                    },
-                                    child: const Text('Storm'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () {
-                                      state.triggerDisaster(
-                                        DisasterType.drought,
-                                      );
-                                      Navigator.of(context).pop();
-                                    },
-                                    child: const Text('Drought'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.of(context).pop(),
-                                    child: const Text('Cancel'),
-                                  ),
-                                ],
-                              );
-                            },
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 6),
-                      _HudActionButton(
-                        icon: Icons.leaderboard,
-                        tooltip: 'Leaderboard',
-                        color: Colors.amber,
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => LeaderboardScreen(player: player),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ],

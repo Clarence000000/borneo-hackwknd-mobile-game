@@ -1,4 +1,5 @@
 import * as functions from "firebase-functions";
+import { CallableRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 
 if (!admin.apps.length) admin.initializeApp();
@@ -11,7 +12,7 @@ const db = admin.firestore();
  * If insured, calculates and deposits the payout into their virtual wallet.
  */
 export const processInsurancePayout = functions.https.onCall(
-    async (request) => {
+    async (request: CallableRequest<any>) => {
         const uid = request.auth?.uid;
         if (!uid) throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
 

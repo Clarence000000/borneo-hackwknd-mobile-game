@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -95,13 +96,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
+<<<<<<< HEAD
                         'Member since: ${player.createdAt.toString().split(' ')[0]}',
                         style: const TextStyle(
                           color: GameColors.uiTextDim,
                           fontSize: 13,
                         ),
+=======
+                        'Member since: ${player.createdAt.toLocal().toString().split(' ')[0]}',
+                        style: const TextStyle(color: GameColors.uiTextDim, fontSize: 13),
+>>>>>>> 81f9380416048b24d12730012d04d26d61163bb1
                       ),
                     ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // ── Logout Button ─────────────────────────
+                Center(
+                  child: TextButton.icon(
+                    onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: GameColors.uiPanel,
+                          title: const Text('Logout', style: TextStyle(color: GameColors.uiRed)),
+                          content: const Text('Are you sure you want to logout?'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: GameColors.uiRed),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Logout', style: TextStyle(color: Colors.white)),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      if (confirm == true) {
+                        await FirebaseAuth.instance.signOut();
+                        if (context.mounted) {
+                          Navigator.of(context).pop(); // Close profile
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.logout, color: GameColors.uiRed, size: 20),
+                    label: const Text('LOGOUT', style: TextStyle(color: GameColors.uiRed, fontWeight: FontWeight.bold)),
                   ),
                 ),
                 const SizedBox(height: 24),

@@ -1,7 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:farm_fintech/models/financial/bnpl_plan.dart';
 import 'package:farm_fintech/models/player.dart';
+<<<<<<< HEAD
 import 'package:farm_fintech/services/admin_account_service.dart';
+=======
+import 'package:farm_fintech/models/tile.dart';
+import 'package:farm_fintech/config/constants.dart';
+>>>>>>> 81f9380416048b24d12730012d04d26d61163bb1
 
 /// Firestore CRUD service for player data.
 class FirestoreService {
@@ -106,5 +111,38 @@ class FirestoreService {
       'category': category, // e.g. 'deposit', 'withdrawal', 'bnplPayment'
       'timestamp': FieldValue.serverTimestamp(),
     });
+  }
+
+  /// Save the entire game grid state
+  Future<void> saveGrid(String uid, List<List<Tile>> grid) async {
+    final batch = _db.batch();
+    final gridRef = _db.collection('users').doc(uid).collection('grid');
+
+    for (final row in grid) {
+      for (final tile in row) {
+        final docId = '${tile.row}_${tile.col}';
+        batch.set(gridRef.doc(docId), tile.toMap());
+      }
+    }
+    await batch.commit();
+  }
+
+  /// Load grid state for a user
+  Future<List<List<Tile>>?> getGrid(String uid) async {
+    final snapshot = await _db.collection('users').doc(uid).collection('grid').get();
+    if (snapshot.docs.isEmpty) return null;
+
+    final List<List<Tile>> grid = List.generate(
+      kGridRows,
+      (row) => List.generate(kGridCols, (col) => Tile(col: col, row: row, type: TileType.grass)),
+    );
+
+    for (final doc in snapshot.docs) {
+      final tile = Tile.fromMap(doc.data());
+      if (tile.row < kGridRows && tile.col < kGridCols) {
+        grid[tile.row][tile.col] = tile;
+      }
+    }
+    return grid;
   }
 }

@@ -125,6 +125,10 @@ class GameState extends ChangeNotifier {
     if (nowDate != storedDate) {
       _manualNextDayUsageDate = nowDate;
       _manualNextDayUsedToday = 0;
+      if (player != null) {
+        player!.manualNextDayUsedToday = 0;
+        player!.manualNextDayUsageDate = nowDate;
+      }
     }
   }
 
@@ -146,6 +150,11 @@ class GameState extends ChangeNotifier {
     }
     _addMonthlyExpense('nextDayFee', kManualNextDayCost);
     _manualNextDayUsedToday++;
+    
+    // Update player object for persistence
+    player!.manualNextDayUsedToday = _manualNextDayUsedToday;
+    player!.manualNextDayUsageDate = _manualNextDayUsageDate;
+    
     return true;
   }
 
@@ -193,6 +202,7 @@ class GameState extends ChangeNotifier {
 
     try {
       await _savePlayerState();
+      await _saveGridState();
       notifyListeners();
       return true;
     } catch (_) {
@@ -200,6 +210,31 @@ class GameState extends ChangeNotifier {
       player!.pay(amount, method: PaymentMethod.cash);
       return false;
     }
+  }
+
+  /// Set player and load their specific grid if it exists
+  Future<void> setPlayer(Player newPlayer) async {
+    player = newPlayer;
+    // Sync state variables from persisted player object
+    currentDay = newPlayer.currentDay;
+    _manualNextDayUsedToday = newPlayer.manualNextDayUsedToday;
+    _manualNextDayUsageDate = newPlayer.manualNextDayUsageDate;
+    
+    notifyListeners(); // Notify early so UI knows player/day is there
+    
+    final savedGrid = await _firestore.getGrid(newPlayer.uid);
+    if (savedGrid != null) {
+      grid = savedGrid;
+    } else {
+      _initGrid(); // Fallback to default
+      await _saveGridState(); // Save the default grid
+    }
+    notifyListeners();
+  }
+
+  Future<void> _saveGridState() async {
+    if (player == null) return;
+    await _firestore.saveGrid(player!.uid, grid);
   }
 
   void _processLoanSharkRepaymentsOnMonthEnd() {
@@ -363,6 +398,7 @@ class GameState extends ChangeNotifier {
 
     try {
       await _savePlayerState();
+      await _saveGridState();
       notifyListeners();
       return harvested;
     } catch (_) {
@@ -578,6 +614,8 @@ class GameState extends ChangeNotifier {
       final previousYear = currentYear;
       final previousMonth = currentMonth;
       currentDay++;
+      if (player != null) player!.currentDay = currentDay;
+      
       if (isManual) {
         _remainingCycleSeconds = kGameDayDurationMinutes * 60;
       }
@@ -607,6 +645,8 @@ class GameState extends ChangeNotifier {
       _applyAutoHarvest();
 
       notifyListeners();
+      await _saveGridState(); // Persist crop growth
+      await _savePlayerState(); // Persist currentDay change
 
       // Fire-and-forget server checks
       if (player != null) {
@@ -843,6 +883,7 @@ class GameState extends ChangeNotifier {
     }
 
     notifyListeners();
+    _saveGridState(); // Persist disaster damage
     return destroyed;
   }
 

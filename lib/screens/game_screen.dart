@@ -14,6 +14,7 @@ import 'package:farm_fintech/services/firestore_service.dart';
 import 'package:farm_fintech/widgets/dialog_popup.dart';
 import 'package:farm_fintech/widgets/hud_overlay.dart';
 import 'package:farm_fintech/utils/currency_util.dart';
+import 'package:farm_fintech/services/seed_service.dart';
 
 /// Main game screen — landscape isometric farm view.
 ///
@@ -51,13 +52,16 @@ class _GameScreenState extends State<GameScreen>
       if (!(state.player?.tutorialCompleted ?? true)) {
         _showTutorial(state);
       }
+      
+      // Auto-seed leaderboard once in background if needed
+      SeedService.seedLeaderboard();
     });
   }
 
   void _showTutorial(GameState state) {
     DialogPopup.show(
       context,
-      title: '🌾 Welcome to Farm FinTech!',
+      title: '🌾 Welcome to Richi Farm!',
       message:
           'Welcome, farmer! Here\'s how to play:\n\n'
           '1. TAP a brown farmland tile to plant crops\n'
@@ -149,7 +153,7 @@ class _GameScreenState extends State<GameScreen>
               ),
 
               // ── Layer 2: HUD Overlay ────────────────────
-              const HudOverlay(),
+              HudOverlay(),
 
               if (state.loanSharkThreatActive)
                 IgnorePointer(

@@ -1,4 +1,5 @@
 import * as functions from "firebase-functions";
+import { CallableRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import fetch from "node-fetch";
 
@@ -34,7 +35,7 @@ interface WeatherResponse {
  * 5. Returns disaster status to client
  */
 export const weatherCheck = functions.https.onCall(
-    async (request) => {
+    async (request: CallableRequest<any>) => {
         const uid = request.auth?.uid;
         if (!uid) throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
 
