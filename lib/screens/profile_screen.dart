@@ -8,8 +8,31 @@ import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/services/firestore_service.dart';
 import 'package:farm_fintech/utils/currency_util.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  Future<List<Transaction>>? _transactionsFuture;
+  String? _transactionsUid;
+
+  Future<List<Transaction>> _fetchTransactions(String uid) async {
+    final docs = await FirestoreService()
+        .getDb()
+        .collection('users')
+        .doc(uid)
+        .collection('transactions')
+        .orderBy('timestamp', descending: true)
+        .limit(10)
+        .get();
+
+    return docs.docs
+        .map((doc) => Transaction.fromMap(doc.id, doc.data()))
+        .toList();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +47,14 @@ class ProfileScreen extends StatelessWidget {
       body: Consumer<GameState>(
         builder: (context, state, _) {
           final player = state.player;
-          if (player == null) return const Center(child: CircularProgressIndicator());
+          if (player == null) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (_transactionsUid != player.uid || _transactionsFuture == null) {
+            _transactionsUid = player.uid;
+            _transactionsFuture = _fetchTransactions(player.uid);
+          }
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -38,24 +68,38 @@ class ProfileScreen extends StatelessWidget {
                       const CircleAvatar(
                         radius: 40,
                         backgroundColor: GameColors.uiAccent,
-                        child: Icon(Icons.person, size: 50, color: GameColors.uiBackground),
+                        child: Icon(
+                          Icons.person,
+                          size: 50,
+                          color: GameColors.uiBackground,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(player.country, style: const TextStyle(fontSize: 24)),
+                          Text(
+                            player.country,
+                            style: const TextStyle(fontSize: 24),
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             player.displayName,
-                            style: const TextStyle(color: GameColors.uiText, fontSize: 22, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                              color: GameColors.uiText,
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Member since: ${player.createdAt.toString().split(' ')[0]}',
-                        style: const TextStyle(color: GameColors.uiTextDim, fontSize: 13),
+                        style: const TextStyle(
+                          color: GameColors.uiTextDim,
+                          fontSize: 13,
+                        ),
                       ),
                     ],
                   ),
@@ -68,7 +112,10 @@ class ProfileScreen extends StatelessWidget {
                     Expanded(
                       child: _StatCard(
                         title: 'Cash',
-                        value: CurrencyUtil.format(player.cashBalance, player.country),
+                        value: CurrencyUtil.format(
+                          player.cashBalance,
+                          player.country,
+                        ),
                         icon: Icons.money,
                         color: GameColors.uiGold,
                       ),
@@ -77,8 +124,11 @@ class ProfileScreen extends StatelessWidget {
                     Expanded(
                       child: _StatCard(
                         title: 'Bank',
-                        value: player.bankRegistered 
-                            ? CurrencyUtil.format(player.bankBalance, player.country)
+                        value: player.bankRegistered
+                            ? CurrencyUtil.format(
+                                player.bankBalance,
+                                player.country,
+                              )
                             : 'Unregistered',
                         icon: Icons.account_balance,
                         color: GameColors.uiGreen,
@@ -92,7 +142,10 @@ class ProfileScreen extends StatelessWidget {
                     Expanded(
                       child: _StatCard(
                         title: 'Net Worth',
-                        value: CurrencyUtil.format(player.totalNetWorth, player.country),
+                        value: CurrencyUtil.format(
+                          player.totalNetWorth,
+                          player.country,
+                        ),
                         icon: Icons.pie_chart,
                         color: GameColors.uiHighlight,
                       ),
@@ -103,9 +156,11 @@ class ProfileScreen extends StatelessWidget {
                         title: 'Credit Score',
                         value: player.creditScore.toString(),
                         icon: Icons.speed,
-                        color: player.creditScore >= 700 
-                            ? GameColors.uiGreen 
-                            : (player.creditScore >= 550 ? GameColors.uiGold : GameColors.uiRed),
+                        color: player.creditScore >= 700
+                            ? GameColors.uiGreen
+                            : (player.creditScore >= 550
+                                  ? GameColors.uiGold
+                                  : GameColors.uiRed),
                       ),
                     ),
                   ],
@@ -113,33 +168,67 @@ class ProfileScreen extends StatelessWidget {
                 const SizedBox(height: 24),
 
                 // ── Active BNPL Plans ────────────────────
-                const Text('Active BNPL Plans', style: TextStyle(color: GameColors.uiText, fontWeight: FontWeight.bold, fontSize: 18)),
+                const Text(
+                  'Active BNPL Plans',
+                  style: TextStyle(
+                    color: GameColors.uiText,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 if (state.bnplPlans.isEmpty)
-                  const Text('No active BNPL plans.', style: TextStyle(color: GameColors.uiTextDim)),
+                  const Text(
+                    'No active BNPL plans.',
+                    style: TextStyle(color: GameColors.uiTextDim),
+                  ),
                 if (state.bnplPlans.isNotEmpty)
-                  ...state.bnplPlans.map((plan) => _BnplTile(plan: plan, playerCountry: player.country)),
+                  ...state.bnplPlans.map(
+                    (plan) =>
+                        _BnplTile(plan: plan, playerCountry: player.country),
+                  ),
 
                 const SizedBox(height: 24),
 
                 // ── Recent Transactions ──────────────────
-                const Text('Recent Transactions', style: TextStyle(color: GameColors.uiText, fontWeight: FontWeight.bold, fontSize: 18)),
+                const Text(
+                  'Recent Transactions',
+                  style: TextStyle(
+                    color: GameColors.uiText,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 FutureBuilder<List<Transaction>>(
-                  future: _fetchTransactions(player.uid),
+                  future: _transactionsFuture,
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());
                     }
                     if (snapshot.hasError) {
-                      return Text('Error loading transactions.', style: TextStyle(color: GameColors.uiRed));
+                      return Text(
+                        'Error loading transactions.',
+                        style: TextStyle(color: GameColors.uiRed),
+                      );
                     }
                     final transactions = snapshot.data ?? [];
                     if (transactions.isEmpty) {
-                      return const Text('No recent transactions.', style: TextStyle(color: GameColors.uiTextDim));
+                      return const Text(
+                        'No recent transactions.',
+                        style: TextStyle(color: GameColors.uiTextDim),
+                      );
                     }
                     return Column(
-                      children: transactions.take(5).map((tx) => _TransactionTile(tx: tx, playerCountry: player.country)).toList(),
+                      children: transactions
+                          .take(5)
+                          .map(
+                            (tx) => _TransactionTile(
+                              tx: tx,
+                              playerCountry: player.country,
+                            ),
+                          )
+                          .toList(),
                     );
                   },
                 ),
@@ -150,18 +239,6 @@ class ProfileScreen extends StatelessWidget {
       ),
     );
   }
-
-  Future<List<Transaction>> _fetchTransactions(String uid) async {
-    final docs = await FirestoreService().getDb()
-      .collection('users')
-      .doc(uid)
-      .collection('transactions')
-      .orderBy('timestamp', descending: true)
-      .limit(10)
-      .get();
-    
-    return docs.docs.map((doc) => Transaction.fromMap(doc.id, doc.data())).toList();
-  }
 }
 
 class _StatCard extends StatelessWidget {
@@ -170,7 +247,12 @@ class _StatCard extends StatelessWidget {
   final IconData icon;
   final Color color;
 
-  const _StatCard({required this.title, required this.value, required this.icon, required this.color});
+  const _StatCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -188,11 +270,24 @@ class _StatCard extends StatelessWidget {
             children: [
               Icon(icon, color: color, size: 20),
               const SizedBox(width: 8),
-              Text(title, style: const TextStyle(color: GameColors.uiTextDim, fontSize: 13)),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: GameColors.uiTextDim,
+                  fontSize: 13,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 18)),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
+          ),
         ],
       ),
     );
@@ -211,10 +306,14 @@ class _BnplTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: plan.isOverdue ? GameColors.uiRed.withValues(alpha: 0.15) : GameColors.uiPanel,
+        color: plan.isOverdue
+            ? GameColors.uiRed.withValues(alpha: 0.15)
+            : GameColors.uiPanel,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: plan.isOverdue ? GameColors.uiRed.withValues(alpha: 0.5) : GameColors.uiAccent.withValues(alpha: 0.3),
+          color: plan.isOverdue
+              ? GameColors.uiRed.withValues(alpha: 0.5)
+              : GameColors.uiAccent.withValues(alpha: 0.3),
         ),
       ),
       child: Row(
@@ -223,19 +322,37 @@ class _BnplTile extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(plan.itemName, style: const TextStyle(color: GameColors.uiText, fontWeight: FontWeight.bold)),
-              Text('${plan.paidInstallments}/${plan.installments} paid',
-                  style: const TextStyle(color: GameColors.uiTextDim, fontSize: 12)),
+              Text(
+                plan.itemName,
+                style: const TextStyle(
+                  color: GameColors.uiText,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                '${plan.paidInstallments}/${plan.installments} paid',
+                style: const TextStyle(
+                  color: GameColors.uiTextDim,
+                  fontSize: 12,
+                ),
+              ),
             ],
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text('${CurrencyUtil.format(plan.monthlyAmount, playerCountry)}/mo',
-                  style: const TextStyle(color: GameColors.uiGold, fontWeight: FontWeight.bold)),
+              Text(
+                '${CurrencyUtil.format(plan.monthlyAmount, playerCountry)}/mo',
+                style: const TextStyle(
+                  color: GameColors.uiGold,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               if (plan.lateFees > 0)
-                Text('Late fees: ${CurrencyUtil.format(plan.lateFees, playerCountry)}',
-                    style: const TextStyle(color: GameColors.uiRed, fontSize: 11)),
+                Text(
+                  'Late fees: ${CurrencyUtil.format(plan.lateFees, playerCountry)}',
+                  style: const TextStyle(color: GameColors.uiRed, fontSize: 11),
+                ),
             ],
           ),
         ],
@@ -252,17 +369,29 @@ class _TransactionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDeposit = tx.category == TransactionCategory.bankDeposit || tx.category == TransactionCategory.cropSale;
+    final isDeposit =
+        tx.category == TransactionCategory.bankDeposit ||
+        tx.category == TransactionCategory.cropSale;
     final color = isDeposit ? GameColors.uiGreen : GameColors.uiText;
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: CircleAvatar(
         backgroundColor: color.withValues(alpha: 0.2),
-        child: Icon(isDeposit ? Icons.add : Icons.remove, color: color, size: 20),
+        child: Icon(
+          isDeposit ? Icons.add : Icons.remove,
+          color: color,
+          size: 20,
+        ),
       ),
-      title: Text(tx.category.name, style: const TextStyle(color: GameColors.uiText)),
-      subtitle: Text(tx.timestamp.toString().split('.')[0], style: const TextStyle(color: GameColors.uiTextDim, fontSize: 11)),
+      title: Text(
+        tx.category.name,
+        style: const TextStyle(color: GameColors.uiText),
+      ),
+      subtitle: Text(
+        tx.timestamp.toString().split('.')[0],
+        style: const TextStyle(color: GameColors.uiTextDim, fontSize: 11),
+      ),
       trailing: Text(
         '${isDeposit ? '+' : '-'}${CurrencyUtil.format(tx.amount, playerCountry)}',
         style: TextStyle(color: color, fontWeight: FontWeight.bold),

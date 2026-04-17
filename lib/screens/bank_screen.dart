@@ -22,6 +22,66 @@ class BankScreen extends StatefulWidget {
 class _BankScreenState extends State<BankScreen> {
   double _loanAmount = 500;
   double _loanMonths = 6;
+  bool _refreshingCreditScore = false;
+  Map<String, int> _creditBreakdown = const {
+    'frequency': 0,
+    'consistency': 50,
+    'amount': 0,
+    'onTimePayments': 100,
+  };
+
+  Future<void> _refreshCreditScore(GameState state, Player player) async {
+    if (_refreshingCreditScore) return;
+
+    setState(() => _refreshingCreditScore = true);
+    final result = await CloudFunctionsService().calculateCreditScore();
+    if (!mounted) return;
+
+    final previousScore =
+        (result['previousScore'] as num?)?.toInt() ?? player.creditScore;
+    final newScore = (result['score'] as num?)?.toInt() ?? player.creditScore;
+    final delta =
+        (result['delta'] as num?)?.toInt() ?? (newScore - previousScore);
+    final rawBreakdown = Map<String, dynamic>.from(
+      (result['breakdown'] as Map?) ?? const {},
+    );
+
+    setState(() {
+      _refreshingCreditScore = false;
+      _creditBreakdown = {
+        'frequency': (rawBreakdown['frequency'] as num?)?.toInt() ?? 0,
+        'consistency': (rawBreakdown['consistency'] as num?)?.toInt() ?? 50,
+        'amount': (rawBreakdown['amount'] as num?)?.toInt() ?? 0,
+        'onTimePayments':
+            (rawBreakdown['onTimePayments'] as num?)?.toInt() ?? 100,
+      };
+      state.player?.creditScore = newScore;
+    });
+    state.refresh();
+
+    final deltaLabel = delta > 0 ? '+$delta' : '$delta';
+    DialogPopup.show(
+      context,
+      title: 'Credit Score Refreshed',
+      message:
+          'Previous score: $previousScore\n'
+          'New score: $newScore\n'
+          'Change: $deltaLabel\n\n'
+          '${_scoreChangeExplanation(delta)}',
+      icon: delta >= 0 ? Icons.trending_up : Icons.trending_down,
+      iconColor: delta >= 0 ? GameColors.uiGreen : GameColors.uiRed,
+    );
+  }
+
+  String _scoreChangeExplanation(int delta) {
+    if (delta > 0) {
+      return 'Good progress. Regular bank activity and on-time payments are improving your profile.';
+    }
+    if (delta < 0) {
+      return 'Your profile weakened. Add more consistent bank transactions and repay bills on time.';
+    }
+    return 'No change yet. Try more regular bank usage or repay insurance / loan costs through the bank.';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +103,13 @@ class _BankScreenState extends State<BankScreen> {
             child: Column(
               children: [
                 // ── Credit Score Card ──────────────────────
-                _CreditScoreCard(score: player.creditScore),
+                _CreditScoreCard(
+                  score: player.creditScore,
+                  refreshing: _refreshingCreditScore,
+                  onRefresh: () => _refreshCreditScore(state, player),
+                ),
+                const SizedBox(height: 12),
+                _CreditImprovementCard(breakdown: _creditBreakdown),
                 const SizedBox(height: 16),
 
                 // ── Bank Registration ─────────────────────
@@ -334,7 +400,14 @@ class _BankScreenState extends State<BankScreen> {
 
 class _CreditScoreCard extends StatelessWidget {
   final int score;
-  const _CreditScoreCard({required this.score});
+  final bool refreshing;
+  final VoidCallback onRefresh;
+
+  const _CreditScoreCard({
+    required this.score,
+    required this.refreshing,
+    required this.onRefresh,
+  });
 
   Color get _scoreColor {
     if (score >= 700) return GameColors.uiGreen;
@@ -401,11 +474,147 @@ class _CreditScoreCard extends StatelessWidget {
                   'Based on bank payment history',
                   style: TextStyle(color: GameColors.uiTextDim, fontSize: 11),
                 ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: ElevatedButton.icon(
+                    onPressed: refreshing ? null : onRefresh,
+                    icon: refreshing
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh, size: 16),
+                    label: Text(
+                      refreshing ? 'Refreshing...' : 'Refresh Credit Score',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _scoreColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CreditImprovementCard extends StatelessWidget {
+  final Map<String, int> breakdown;
+
+  const _CreditImprovementCard({required this.breakdown});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: GameColors.uiPanel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: GameColors.uiAccent.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'How to Improve Score',
+            style: TextStyle(
+              color: GameColors.uiText,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Use the bank regularly, keep transaction habits consistent, make meaningful payment amounts, and repay insurance or debt on time.',
+            style: TextStyle(color: GameColors.uiTextDim, fontSize: 12),
+          ),
+          const SizedBox(height: 14),
+          _ScoreBreakdownBar(
+            label: 'Payment Frequency',
+            value: breakdown['frequency'] ?? 0,
+            color: GameColors.uiGreen,
+          ),
+          const SizedBox(height: 10),
+          _ScoreBreakdownBar(
+            label: 'Payment Consistency',
+            value: breakdown['consistency'] ?? 0,
+            color: GameColors.uiHighlight,
+          ),
+          const SizedBox(height: 10),
+          _ScoreBreakdownBar(
+            label: 'Transaction Amount',
+            value: breakdown['amount'] ?? 0,
+            color: GameColors.uiGold,
+          ),
+          const SizedBox(height: 10),
+          _ScoreBreakdownBar(
+            label: 'On-time Payments',
+            value: breakdown['onTimePayments'] ?? 0,
+            color: GameColors.uiAccent,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScoreBreakdownBar extends StatelessWidget {
+  final String label;
+  final int value;
+  final Color color;
+
+  const _ScoreBreakdownBar({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = (value.clamp(0, 100)) / 100;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: GameColors.uiText,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+            Text(
+              '$value/100',
+              style: const TextStyle(color: GameColors.uiTextDim, fontSize: 11),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            minHeight: 10,
+            value: normalized,
+            backgroundColor: GameColors.uiBackground.withValues(alpha: 0.5),
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+          ),
+        ),
+      ],
     );
   }
 }

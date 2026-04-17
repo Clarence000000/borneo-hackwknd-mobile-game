@@ -73,7 +73,17 @@ class CloudFunctionsService {
       return Map<String, dynamic>.from(result.data);
     } catch (e) {
       debugPrint('Error calling calculateCreditScore: $e');
-      return {'score': 400};
+      return {
+        'score': 400,
+        'previousScore': 400,
+        'delta': 0,
+        'breakdown': {
+          'frequency': 0,
+          'consistency': 50,
+          'amount': 0,
+          'onTimePayments': 100,
+        },
+      };
     }
   }
 }
