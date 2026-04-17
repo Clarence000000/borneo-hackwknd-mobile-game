@@ -42,6 +42,9 @@ const db = admin.firestore();
 // Penalty config (realistic Malaysian BNPL fees)
 const ADMIN_FEE = 10; // RM10 admin fee per missed payment
 const LATE_FEE = 23; // RM23 late payment fee
+const GAME_DAYS_PER_MONTH = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const ADMIN_TEST_EMAILS = new Set(["admin@farmfintech.test"]);
 function readInstallments(plan) {
     var _a, _b;
     return ((_b = (_a = plan.installments) !== null && _a !== void 0 ? _a : plan.termMonths) !== null && _b !== void 0 ? _b : 0);
@@ -64,6 +67,16 @@ function readNextDueDateMillis(plan) {
     var _a, _b;
     return (((_b = (_a = plan.nextDueDate) === null || _a === void 0 ? void 0 : _a.toMillis) === null || _b === void 0 ? void 0 : _b.call(_a)) || plan.nextDueDate || Date.now());
 }
+function readNextDueDay(plan) {
+    return typeof plan.nextDueDay === "number" ? plan.nextDueDay : null;
+}
+function isAdminUser(userData, email) {
+    if ((userData === null || userData === void 0 ? void 0 : userData.isAdmin) === true)
+        return true;
+    if (!email)
+        return false;
+    return ADMIN_TEST_EMAILS.has(String(email).trim().toLowerCase());
+}
 function resolveWalletToCharge(userData, amountDue, method) {
     if (method === "cash") {
         return userData.cashBalance >= amountDue ? "cash" : null;
@@ -77,7 +90,7 @@ function resolveWalletToCharge(userData, amountDue, method) {
         return "bank";
     return null;
 }
-async function applyInstallmentPayment(uid, planRef, plan, method) {
+async function applyInstallmentPayment(uid, planRef, plan, method, isAdmin) {
     var _a;
     const installments = readInstallments(plan);
     const paidInstallments = readPaidInstallments(plan);
@@ -101,28 +114,33 @@ async function applyInstallmentPayment(uid, planRef, plan, method) {
     if (!userData) {
         throw new functions.https.HttpsError("not-found", "User not found");
     }
-    const wallet = resolveWalletToCharge(userData, amountDue, method);
-    if (!wallet) {
-        return {
-            paidInstallment: false,
-            insufficientFunds: true,
-            amountDue,
-            message: `Insufficient funds. Need RM${amountDue.toFixed(2)}.`,
-        };
+    let wallet = "admin";
+    if (!isAdmin) {
+        wallet = resolveWalletToCharge(userData, amountDue, method);
+        if (!wallet) {
+            return {
+                paidInstallment: false,
+                insufficientFunds: true,
+                amountDue,
+                message: `Insufficient funds. Need RM${amountDue.toFixed(2)}.`,
+            };
+        }
+        await userRef.update({
+            [`${wallet}Balance`]: admin.firestore.FieldValue.increment(-amountDue),
+        });
     }
-    await userRef.update({
-        [`${wallet}Balance`]: admin.firestore.FieldValue.increment(-amountDue),
-    });
     const nextPaidInstallments = paidInstallments + 1;
     const isFullyPaid = nextPaidInstallments >= installments;
     const dueDateMillis = readNextDueDateMillis(plan);
-    const nextDueDate = new Date(Math.max(Date.now(), dueDateMillis) + 30 * 24 * 60 * 60 * 1000);
+    const nextDueDay = readNextDueDay(plan);
+    const nextDueDate = new Date(Math.max(Date.now(), dueDateMillis) + GAME_DAYS_PER_MONTH * DAY_MS);
     await planRef.update({
         paidInstallments: nextPaidInstallments,
         paidMonths: nextPaidInstallments,
         remainingAmount: Math.max(0, (installments - nextPaidInstallments) * monthlyAmount),
         lateFees: 0,
         nextDueDate: admin.firestore.Timestamp.fromDate(nextDueDate),
+        nextDueDay: nextDueDay != null ? nextDueDay + GAME_DAYS_PER_MONTH : null,
         status: isFullyPaid ? "paid" : "active",
     });
     await userRef.collection("transactions").add({
@@ -143,11 +161,12 @@ async function applyInstallmentPayment(uid, planRef, plan, method) {
     };
 }
 exports.repayBnplInstallment = functions.https.onCall(async (request) => {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
+    const email = (_d = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _d === void 0 ? void 0 : _d.email;
     if (!uid)
         throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
-    const { planId, paymentMethod } = request.data;
+    const { planId, paymentMethod, currentDay } = request.data;
     if (!planId) {
         throw new functions.https.HttpsError("invalid-argument", "planId required");
     }
@@ -164,13 +183,34 @@ exports.repayBnplInstallment = functions.https.onCall(async (request) => {
         throw new functions.https.HttpsError("not-found", "BNPL plan not found");
     }
     const plan = planDoc.data();
-    if (((_b = plan.status) !== null && _b !== void 0 ? _b : "active") !== "active") {
+    if (((_c = plan.status) !== null && _c !== void 0 ? _c : "active") !== "active") {
         return {
             paidInstallment: false,
-            message: `Plan status is ${((_c = plan.status) !== null && _c !== void 0 ? _c : "unknown")} and cannot be paid.`,
+            message: `Plan status is ${((plan.status) !== null && plan.status !== void 0 ? plan.status : "unknown")} and cannot be paid.`,
         };
     }
-    return applyInstallmentPayment(uid, planRef, plan, normalizedMethod);
+    const dueGameDay = readNextDueDay(plan);
+    if (typeof currentDay === "number" && dueGameDay != null && currentDay < dueGameDay) {
+        return {
+            paidInstallment: false,
+            message: `Installment is not due yet. Next due on game day ${dueGameDay}.`,
+        };
+    }
+    // Legacy fallback for plans without nextDueDay.
+    if (dueGameDay == null) {
+        const dueDate = readNextDueDateMillis(plan);
+        if (Date.now() < dueDate) {
+            return {
+                paidInstallment: false,
+                message: "Installment is not due yet.",
+            };
+        }
+    }
+    const userRef = db.collection("users").doc(uid);
+    const userDoc = await userRef.get();
+    const userData = userDoc.data();
+    const adminAccount = isAdminUser(userData, email);
+    return applyInstallmentPayment(uid, planRef, plan, normalizedMethod, adminAccount);
 });
 /**
  * BNPL Penalty Calculation
@@ -179,11 +219,12 @@ exports.repayBnplInstallment = functions.https.onCall(async (request) => {
  * Applies realistic penalty charges to teach the dangers of BNPL debt traps.
  */
 exports.calculateBnplPenalty = functions.https.onCall(async (request) => {
-    var _a;
+    var _a, _b, _c;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
+    const email = (_c = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _c === void 0 ? void 0 : _c.email;
     if (!uid)
         throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
-    const { planId } = request.data;
+    const { planId, currentDay } = request.data;
     if (!planId) {
         throw new functions.https.HttpsError("invalid-argument", "planId required");
     }
@@ -197,13 +238,28 @@ exports.calculateBnplPenalty = functions.https.onCall(async (request) => {
         throw new functions.https.HttpsError("not-found", "BNPL plan not found");
     }
     const plan = planDoc.data();
-    const now = Date.now();
-    const dueDate = readNextDueDateMillis(plan);
-    if (now <= dueDate) {
-        return { penalty: 0, message: "Payment is not yet overdue" };
+    const userRef = db.collection("users").doc(uid);
+    const userDoc = await userRef.get();
+    const userData = userDoc.data();
+    const adminAccount = isAdminUser(userData, email);
+    const dueGameDay = readNextDueDay(plan);
+    if (typeof currentDay === "number" && dueGameDay != null) {
+        if (currentDay <= dueGameDay) {
+            return {
+                penalty: 0,
+                message: `Payment is not yet overdue (due on game day ${dueGameDay})`,
+            };
+        }
+    }
+    else {
+        const now = Date.now();
+        const dueDate = readNextDueDateMillis(plan);
+        if (now <= dueDate) {
+            return { penalty: 0, message: "Payment is not yet overdue" };
+        }
     }
     // First try to collect normal installment (cash first then bank).
-    const payResult = await applyInstallmentPayment(uid, planRef, plan, "auto");
+    const payResult = await applyInstallmentPayment(uid, planRef, plan, "auto", adminAccount);
     if (payResult.paidInstallment === true) {
         return {
             penalty: 0,
@@ -213,16 +269,15 @@ exports.calculateBnplPenalty = functions.https.onCall(async (request) => {
         };
     }
     // Calculate days overdue
-    const daysOverdue = Math.floor((now - dueDate) / (24 * 60 * 60 * 1000));
+    const daysOverdue = typeof currentDay === "number" && dueGameDay != null
+        ? currentDay - dueGameDay
+        : Math.floor((Date.now() - readNextDueDateMillis(plan)) / DAY_MS);
     const totalPenalty = ADMIN_FEE + LATE_FEE;
     // Apply penalty
     await planRef.update({
         lateFees: admin.firestore.FieldValue.increment(totalPenalty),
     });
     // Deduct from player's wallet (cash first, then bank)
-    const userRef = db.collection("users").doc(uid);
-    const userDoc = await userRef.get();
-    const userData = userDoc.data();
     let deductedFrom = "cash";
     if (userData.cashBalance >= totalPenalty) {
         await userRef.update({

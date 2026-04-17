@@ -184,8 +184,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 if (state.bnplPlans.isNotEmpty)
                   ...state.bnplPlans.map(
-                    (plan) =>
-                        _BnplTile(plan: plan, playerCountry: player.country),
+                    (plan) => _BnplTile(
+                      plan: plan,
+                      playerCountry: player.country,
+                      currentDay: state.currentDay,
+                    ),
                   ),
 
                 const SizedBox(height: 24),
@@ -297,8 +300,13 @@ class _StatCard extends StatelessWidget {
 class _BnplTile extends StatelessWidget {
   final BnplPlan plan;
   final String playerCountry;
+  final int currentDay;
 
-  const _BnplTile({required this.plan, required this.playerCountry});
+  const _BnplTile({
+    required this.plan,
+    required this.playerCountry,
+    required this.currentDay,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -306,12 +314,12 @@ class _BnplTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: plan.isOverdue
+        color: plan.isOverdueAtGameDay(currentDay)
             ? GameColors.uiRed.withValues(alpha: 0.15)
             : GameColors.uiPanel,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: plan.isOverdue
+          color: plan.isOverdueAtGameDay(currentDay)
               ? GameColors.uiRed.withValues(alpha: 0.5)
               : GameColors.uiAccent.withValues(alpha: 0.3),
         ),

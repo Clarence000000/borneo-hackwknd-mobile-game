@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:farm_fintech/models/financial/bnpl_plan.dart';
 import 'package:farm_fintech/models/player.dart';
+import 'package:farm_fintech/services/admin_account_service.dart';
 
 /// Firestore CRUD service for player data.
 class FirestoreService {
@@ -16,6 +17,7 @@ class FirestoreService {
 
   /// Creates a new player profile in Firestore after registration
   Future<void> createPlayer(Player player) async {
+    AdminAccountService.applyAdminPrivileges(player);
     await _db.collection('users').doc(player.uid).set(player.toMap());
     _cachedPlayer = player;
   }
@@ -31,11 +33,19 @@ class FirestoreService {
 
     final data = doc.data()!;
     _cachedPlayer = Player.fromMap(uid, data);
+
+    final wasAdmin = _cachedPlayer!.isAdmin;
+    AdminAccountService.applyAdminPrivileges(_cachedPlayer!);
+    if (_cachedPlayer!.isAdmin && !wasAdmin) {
+      await savePlayer(_cachedPlayer!);
+    }
+
     return _cachedPlayer;
   }
 
   /// Update an existing player's profile data
   Future<void> savePlayer(Player player) async {
+    AdminAccountService.applyAdminPrivileges(player);
     _cachedPlayer = player;
     await _db
         .collection('users')
@@ -63,6 +73,7 @@ class FirestoreService {
           'monthlyPayment': plan.monthlyAmount,
           'status': plan.status.name,
           'nextDueDate': Timestamp.fromDate(plan.nextDueDate),
+          'nextDueDay': plan.nextDueDay,
           'lateFees': plan.lateFees,
           'createdAt': FieldValue.serverTimestamp(),
         });

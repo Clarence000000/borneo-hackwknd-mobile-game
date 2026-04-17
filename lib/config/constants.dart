@@ -82,3 +82,7 @@ const int kGameDaysPerMonth = 30;
 const int kGameMonthsPerYear = 12;
 const int kFreeManualNextDayPerRealDay = 5;
 const double kManualNextDayCost = 10.0;
+
+// ─── Admin Test Account ───────────────────────────────────────
+const Set<String> kAdminTestEmails = {'admin@farmfintech.test'};
+const double kAdminUnlimitedBalance = 999999999.0;

@@ -1,6 +1,13 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
+String _readFunctionErrorMessage(Object e) {
+  if (e is FirebaseFunctionsException) {
+    return e.message ?? 'Cloud function error (${e.code}).';
+  }
+  return e.toString();
+}
+
 /// Generic Cloud Functions caller service.
 class CloudFunctionsService {
   final FirebaseFunctions _functions = FirebaseFunctions.instance;
@@ -24,14 +31,24 @@ class CloudFunctionsService {
   }
 
   /// Calculate penalty for an overdue BNPL plan
-  Future<Map<String, dynamic>> calculateBnplPenalty(String planId) async {
+  Future<Map<String, dynamic>> calculateBnplPenalty(
+    String planId,
+    int currentDay,
+  ) async {
     try {
       final callable = _functions.httpsCallable('calculateBnplPenalty');
-      final result = await callable.call({'planId': planId});
+      final result = await callable.call({
+        'planId': planId,
+        'currentDay': currentDay,
+      });
       return Map<String, dynamic>.from(result.data);
     } catch (e) {
       debugPrint('Error calling calculateBnplPenalty: $e');
-      return {'penalty': 0, 'error': e.toString()};
+      return {
+        'penalty': 0,
+        'error': e.toString(),
+        'message': _readFunctionErrorMessage(e),
+      };
     }
   }
 
@@ -39,17 +56,23 @@ class CloudFunctionsService {
   Future<Map<String, dynamic>> repayBnplInstallment(
     String planId,
     String paymentMethod,
+    int currentDay,
   ) async {
     try {
       final callable = _functions.httpsCallable('repayBnplInstallment');
       final result = await callable.call({
         'planId': planId,
         'paymentMethod': paymentMethod,
+        'currentDay': currentDay,
       });
       return Map<String, dynamic>.from(result.data);
     } catch (e) {
       debugPrint('Error calling repayBnplInstallment: $e');
-      return {'paidInstallment': false, 'error': e.toString()};
+      return {
+        'paidInstallment': false,
+        'error': e.toString(),
+        'message': _readFunctionErrorMessage(e),
+      };
     }
   }
 

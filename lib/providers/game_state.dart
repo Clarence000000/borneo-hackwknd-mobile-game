@@ -653,7 +653,10 @@ class GameState extends ChangeNotifier {
         // 2. BNPL Auto-payment / Penalty check
         for (final plan in bnplPlans) {
           if (plan.status == BnplStatus.active) {
-            final result = await _cloud.calculateBnplPenalty(plan.id);
+            final result = await _cloud.calculateBnplPenalty(
+              plan.id,
+              currentDay,
+            );
             // If a penalty was applied or defaulted, it modified the user wallet in Firestore
             if ((result['penalty'] != null && result['penalty'] > 0) ||
                 (result['autoPaid'] == true) ||
@@ -749,7 +752,51 @@ class GameState extends ChangeNotifier {
       return {'paidInstallment': false, 'message': 'Player not loaded.'};
     }
 
-    final result = await _cloud.repayBnplInstallment(planId, method.name);
+    final result = await _cloud.repayBnplInstallment(
+      planId,
+      method.name,
+      currentDay,
+    );
+
+    if (result['paidInstallment'] != true && player!.isAdmin == true) {
+      final index = bnplPlans.indexWhere((plan) => plan.id == planId);
+      if (index < 0) {
+        return {
+          'paidInstallment': false,
+          'message': 'BNPL plan not found for admin fallback.',
+        };
+      }
+
+      final plan = bnplPlans[index];
+      if (plan.status != BnplStatus.active) {
+        return {
+          'paidInstallment': false,
+          'message': 'Plan status is ${plan.status.name} and cannot be paid.',
+        };
+      }
+
+      plan.paidInstallments = (plan.paidInstallments + 1).clamp(
+        0,
+        plan.installments,
+      );
+      plan.lateFees = 0;
+      plan.nextDueDay = (plan.nextDueDay ?? currentDay) + kGameDaysPerMonth;
+      plan.nextDueDate = DateTime.now().add(
+        const Duration(days: kGameDaysPerMonth),
+      );
+
+      if (plan.paidInstallments >= plan.installments) {
+        plan.status = BnplStatus.paid;
+      }
+
+      notifyListeners();
+      return {
+        'paidInstallment': true,
+        'completed': plan.status == BnplStatus.paid,
+        'adminBypass': true,
+        'message': 'Admin test payment applied locally.',
+      };
+    }
 
     final updatedUser = await _firestore.getPlayer(
       player!.uid,
@@ -767,7 +814,10 @@ class GameState extends ChangeNotifier {
         plan.installments,
       );
       plan.lateFees = 0;
-      plan.nextDueDate = DateTime.now().add(const Duration(days: 30));
+      plan.nextDueDay = (plan.nextDueDay ?? currentDay) + kGameDaysPerMonth;
+      plan.nextDueDate = DateTime.now().add(
+        const Duration(days: kGameDaysPerMonth),
+      );
       if (result['completed'] == true ||
           plan.paidInstallments >= plan.installments) {
         plan.status = BnplStatus.paid;

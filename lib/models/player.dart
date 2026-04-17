@@ -16,6 +16,7 @@ class Player {
 
   // Credit
   int creditScore;
+  bool isAdmin;
 
   // Equipment effects
   bool tractorOwned;
@@ -38,6 +39,7 @@ class Player {
     this.bankBalance = 0,
     this.bankRegistered = false,
     this.creditScore = 500,
+    this.isAdmin = false,
     this.tractorOwned = false,
     this.autoHarvestEnabled = false,
     this.fertilizerPackCount = 0,
@@ -53,6 +55,8 @@ class Player {
 
   /// Pay from the specified method. Returns true if sufficient balance.
   bool pay(double amount, {required PaymentMethod method}) {
+    if (isAdmin) return true;
+
     switch (method) {
       case PaymentMethod.cash:
         if (cashBalance < amount) return false;
@@ -88,6 +92,7 @@ class Player {
     'bankBalance': bankBalance,
     'bankRegistered': bankRegistered,
     'creditScore': creditScore,
+    'isAdmin': isAdmin,
     'tractorOwned': tractorOwned,
     'autoHarvestEnabled': autoHarvestEnabled,
     'fertilizerPackCount': fertilizerPackCount,
@@ -109,6 +114,7 @@ class Player {
     bankBalance: (map['bankBalance'] as num?)?.toDouble() ?? 0,
     bankRegistered: map['bankRegistered'] as bool? ?? false,
     creditScore: map['creditScore'] as int? ?? 500,
+    isAdmin: map['isAdmin'] as bool? ?? false,
     tractorOwned: map['tractorOwned'] as bool? ?? false,
     autoHarvestEnabled: map['autoHarvestEnabled'] as bool? ?? false,
     fertilizerPackCount: map['fertilizerPackCount'] as int? ?? 0,

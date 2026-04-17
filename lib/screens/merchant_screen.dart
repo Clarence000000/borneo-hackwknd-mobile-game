@@ -139,14 +139,20 @@ class MerchantScreen extends StatelessWidget {
                                   margin: const EdgeInsets.only(bottom: 8),
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: plan.isOverdue
+                                    color:
+                                        plan.isOverdueAtGameDay(
+                                          state.currentDay,
+                                        )
                                         ? GameColors.uiRed.withValues(
                                             alpha: 0.15,
                                           )
                                         : GameColors.uiPanel,
                                     borderRadius: BorderRadius.circular(10),
                                     border: Border.all(
-                                      color: plan.isOverdue
+                                      color:
+                                          plan.isOverdueAtGameDay(
+                                            state.currentDay,
+                                          )
                                           ? GameColors.uiRed.withValues(
                                               alpha: 0.5,
                                             )
@@ -233,6 +239,8 @@ class MerchantScreen extends StatelessWidget {
                                                   message:
                                                       (result['message']
                                                           as String?) ??
+                                                      (result['error']
+                                                          as String?) ??
                                                       'Unable to process payment.',
                                                   icon:
                                                       result['paidInstallment'] ==
@@ -280,6 +288,8 @@ class MerchantScreen extends StatelessWidget {
                                                             : '⚠️ Payment Failed',
                                                         message:
                                                             (result['message']
+                                                                as String?) ??
+                                                            (result['error']
                                                                 as String?) ??
                                                             'Unable to process payment.',
                                                         icon:
@@ -562,6 +572,7 @@ class _EquipmentCard extends StatelessWidget {
                         equipment.name,
                         equipment.price,
                         months,
+                        state.currentDay,
                       );
                       await FirestoreService().createBnplPlan(player.uid, plan);
                       state.bnplPlans.add(plan);
@@ -723,13 +734,19 @@ class _MarketSection extends StatelessWidget {
   }
 }
 
-BnplPlan __createBnplPlan(String itemName, double totalAmount, int months) {
+BnplPlan __createBnplPlan(
+  String itemName,
+  double totalAmount,
+  int months,
+  int currentDay,
+) {
   return BnplPlan(
     id: DateTime.now().millisecondsSinceEpoch.toString(),
     itemName: itemName,
     totalAmount: totalAmount,
     installments: months,
     monthlyAmount: totalAmount / months,
-    nextDueDate: DateTime.now().add(const Duration(days: 30)),
+    nextDueDate: DateTime.now().add(const Duration(days: kGameDaysPerMonth)),
+    nextDueDay: currentDay + kGameDaysPerMonth,
   );
 }
