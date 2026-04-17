@@ -1,12 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:farm_fintech/models/financial/bnpl_plan.dart';
 import 'package:farm_fintech/models/player.dart';
-<<<<<<< HEAD
 import 'package:farm_fintech/services/admin_account_service.dart';
-=======
 import 'package:farm_fintech/models/tile.dart';
 import 'package:farm_fintech/config/constants.dart';
->>>>>>> 81f9380416048b24d12730012d04d26d61163bb1
 
 /// Firestore CRUD service for player data.
 class FirestoreService {

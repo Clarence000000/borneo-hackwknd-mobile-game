@@ -96,16 +96,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-<<<<<<< HEAD
-                        'Member since: ${player.createdAt.toString().split(' ')[0]}',
-                        style: const TextStyle(
-                          color: GameColors.uiTextDim,
-                          fontSize: 13,
-                        ),
-=======
+
                         'Member since: ${player.createdAt.toLocal().toString().split(' ')[0]}',
                         style: const TextStyle(color: GameColors.uiTextDim, fontSize: 13),
->>>>>>> 81f9380416048b24d12730012d04d26d61163bb1
+
                       ),
                     ],
                   ),
