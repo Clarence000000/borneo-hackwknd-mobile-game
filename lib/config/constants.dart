@@ -2,10 +2,10 @@
 library;
 
 // ─── Grid & Tile ───────────────────────────────────────────────
-const int kGridCols = 8;
-const int kGridRows = 8;
-const double kTileWidth = 64.0;
-const double kTileHeight = 32.0;
+const int kGridCols = 30;
+const int kGridRows = 20;
+const double kTileWidth = 16.0;
+const double kTileHeight = 16.0;
 
 // ─── Currency Map (ASEAN) ──────────────────────────────────────
 const Map<String, String> kCountryCurrency = {

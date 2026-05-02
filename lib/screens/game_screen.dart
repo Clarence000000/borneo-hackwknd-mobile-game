@@ -1,13 +1,13 @@
 import 'dart:async';
 
+import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:farm_fintech/config/constants.dart';
 import 'package:farm_fintech/config/theme.dart';
-import 'package:farm_fintech/engine/game_painter.dart';
-import 'package:farm_fintech/engine/sky_painter.dart';
+import 'package:farm_fintech/engine/richi_farm_game.dart';
 import 'package:farm_fintech/models/tile.dart';
 import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/services/firestore_service.dart';
@@ -16,10 +16,10 @@ import 'package:farm_fintech/widgets/hud_overlay.dart';
 import 'package:farm_fintech/utils/currency_util.dart';
 import 'package:farm_fintech/services/seed_service.dart';
 
-/// Main game screen — landscape isometric farm view.
+/// Main game screen — landscape farm view powered by Flame engine.
 ///
-/// Layered rendering (per 2d-games skill):
-///   Sky → Isometric Grid → HUD → Tile Action Bar
+/// Layered rendering:
+///   Flame GameWidget (Tiled map + camera) → Flutter overlays (HUD, action bar)
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
 
@@ -27,11 +27,8 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animController;
-  Offset _lastFocalPoint = Offset.zero;
-  double _baseScale = 1.0;
+class _GameScreenState extends State<GameScreen> {
+  late RichiFarmGame _game;
   bool _showingMonthlyReport = false;
   bool _wasLoanSharkThreatActive = false;
   Timer? _threatHapticTimer;
@@ -39,20 +36,15 @@ class _GameScreenState extends State<GameScreen>
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4), // Slower for smoother sky
-    )..repeat();
 
-    // Center camera after first frame
+    final state = context.read<GameState>();
+    _game = RichiFarmGame(gameState: state);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final state = context.read<GameState>();
-      state.centerCamera(MediaQuery.of(context).size);
-
       if (!(state.player?.tutorialCompleted ?? true)) {
         _showTutorial(state);
       }
-      
+
       // Auto-seed leaderboard once in background if needed
       SeedService.seedLeaderboard();
     });
@@ -83,7 +75,6 @@ class _GameScreenState extends State<GameScreen>
 
   @override
   void dispose() {
-    _animController.dispose();
     _threatHapticTimer?.cancel();
     super.dispose();
   }
@@ -98,81 +89,27 @@ class _GameScreenState extends State<GameScreen>
           _handleLoanSharkThreatEffects(state);
           return Stack(
             children: [
-              // ── Layer 0: Dynamic Sky Background ──────────
-              AnimatedBuilder(
-                animation: _animController,
-                builder: (context, _) {
-                  return CustomPaint(
-                    painter: SkyPainter(
-                      weather: state.activeDisaster,
-                      animationPhase: _animController.value,
-                      currentDay: state.currentDay,
-                    ),
-                    size: Size.infinite,
-                  );
-                },
-              ),
+              // ── Layer 0: Flame Game (Tiled map + camera) ────
+              GameWidget(game: _game),
 
-              // ── Layer 1: Isometric Farm Grid ────────────
-              GestureDetector(
-                onScaleStart: (details) {
-                  _lastFocalPoint = details.focalPoint;
-                  _baseScale = state.camera.scale;
-                },
-                onScaleUpdate: (details) {
-                  // Pan: translate by focal point delta
-                  final delta = details.focalPoint - _lastFocalPoint;
-                  _lastFocalPoint = details.focalPoint;
-                  state.panCamera(delta);
+              // ── Layer 1: HUD Overlay ────────────────────────
+              const HudOverlay(),
 
-                  // Zoom: only when pinching (2+ fingers)
-                  if (details.scale != 1.0) {
-                    final newScale = _baseScale * details.scale;
-                    state.camera.zoom(newScale, details.focalPoint);
-                  }
-                },
-                onTapUp: (details) {
-                  state.handleTap(details.localPosition);
-                },
-                child: AnimatedBuilder(
-                  animation: _animController,
-                  builder: (context, _) {
-                    return CustomPaint(
-                      painter: GamePainter(
-                        grid: state.grid,
-                        camera: state.camera,
-                        engine: state.engine,
-                        selectedTile: state.selectedTile,
-                        activeDisaster: state.activeDisaster,
-                        animationPhase: _animController.value,
-                      ),
-                      size: Size.infinite,
-                    );
-                  },
-                ),
-              ),
-
-              // ── Layer 2: HUD Overlay ────────────────────
-              HudOverlay(),
-
+              // ── Layer 2: Loan Shark Threat Tint ─────────────
               if (state.loanSharkThreatActive)
                 IgnorePointer(
-                  child: AnimatedBuilder(
-                    animation: _animController,
-                    builder: (context, _) {
-                      final pulse =
-                          0.10 +
-                          (0.08 *
-                              (0.5 +
-                                  0.5 * (1 - (_animController.value * 6 % 2))));
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0.10, end: 0.18),
+                    duration: const Duration(milliseconds: 300),
+                    builder: (context, value, _) {
                       return Container(
-                        color: GameColors.uiRed.withValues(alpha: pulse),
+                        color: GameColors.uiRed.withValues(alpha: value),
                       );
                     },
                   ),
                 ),
 
-              // ── Layer 3: Tile Action Bar (bottom sheet) ──
+              // ── Layer 3: Tile Action Bar (bottom sheet) ─────
               if (state.selectedTile != null) _buildTileActionBar(state),
             ],
           );
@@ -242,7 +179,7 @@ class _GameScreenState extends State<GameScreen>
   }
 
   /// Bottom action bar for the selected tile.
-  /// Redesigned for landscape — compact horizontal layout.
+  /// Compact horizontal layout for landscape.
   Widget _buildTileActionBar(GameState state) {
     final (col, row) = state.selectedTile!;
     final tile = state.grid[row][col];
