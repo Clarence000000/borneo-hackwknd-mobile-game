@@ -161,9 +161,9 @@ async function applyInstallmentPayment(uid, planRef, plan, method, isAdmin) {
     };
 }
 exports.repayBnplInstallment = functions.https.onCall(async (request) => {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
-    const email = (_d = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _d === void 0 ? void 0 : _d.email;
+    const email = (_c = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _c === void 0 ? void 0 : _c.email;
     if (!uid)
         throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
     const { planId, paymentMethod, currentDay } = request.data;
@@ -183,10 +183,10 @@ exports.repayBnplInstallment = functions.https.onCall(async (request) => {
         throw new functions.https.HttpsError("not-found", "BNPL plan not found");
     }
     const plan = planDoc.data();
-    if (((_c = plan.status) !== null && _c !== void 0 ? _c : "active") !== "active") {
+    if (((_d = plan.status) !== null && _d !== void 0 ? _d : "active") !== "active") {
         return {
             paidInstallment: false,
-            message: `Plan status is ${((plan.status) !== null && plan.status !== void 0 ? plan.status : "unknown")} and cannot be paid.`,
+            message: `Plan status is ${((_e = plan.status) !== null && _e !== void 0 ? _e : "unknown")} and cannot be paid.`,
         };
     }
     const dueGameDay = readNextDueDay(plan);

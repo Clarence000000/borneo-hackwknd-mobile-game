@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "borneo-hackwknd-richi"
-  }
+    "default": "borneo-hackhathon-richi"
+  },
+  "targets": {},
+  "etags": {}
 }

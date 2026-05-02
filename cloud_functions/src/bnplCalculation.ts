@@ -315,3 +315,65 @@ export const calculateBnplPenalty = functions.https.onCall(
         };
     }
 );
+
+/**
+ * Create BNPL Plan
+ * Callable: Expects { totalAmount, installments|termMonths, monthlyAmount?, paymentMethod?, startDay?, merchant?, description? }
+ * Writes a document under users/{uid}/bnplPlans/{autoId}
+ */
+export const createBnplPlan = functions.https.onCall(
+    async (request: CallableRequest<any>) => {
+        const uid = request.auth?.uid;
+        if (!uid) throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
+
+        const data = request.data || {};
+        const totalAmount = Number(data.totalAmount ?? data.amount ?? 0);
+        const installments = Number(data.installments ?? data.termMonths ?? 0);
+        let monthlyAmount = data.monthlyAmount != null ? Number(data.monthlyAmount) : null;
+        const paymentMethod = (data.paymentMethod as PaymentMethod) ?? "auto";
+        const merchant = typeof data.merchant === "string" ? data.merchant : "merchant";
+        const description = typeof data.description === "string" ? data.description : "BNPL purchase";
+
+        if (!(totalAmount > 0)) {
+            throw new functions.https.HttpsError("invalid-argument", "totalAmount required and must be > 0");
+        }
+        if (!(installments > 0) && !(monthlyAmount && monthlyAmount > 0)) {
+            throw new functions.https.HttpsError(
+                "invalid-argument",
+                "Either installments (termMonths) or monthlyAmount must be provided and > 0",
+            );
+        }
+
+        if (!monthlyAmount) {
+            monthlyAmount = installments > 0 ? totalAmount / installments : totalAmount;
+        }
+
+        const nextDueDate = new Date(Date.now() + GAME_DAYS_PER_MONTH * DAY_MS);
+        const startDay = typeof data.startDay === "number" ? data.startDay : null;
+        const nextDueDay = startDay != null ? startDay + GAME_DAYS_PER_MONTH : null;
+
+        const plan: any = {
+            totalAmount,
+            installments,
+            termMonths: installments,
+            monthlyAmount,
+            monthlyPayment: monthlyAmount,
+            paidInstallments: 0,
+            paidMonths: 0,
+            remainingAmount: totalAmount,
+            lateFees: 0,
+            status: "active",
+            paymentMethod,
+            merchant,
+            description,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            nextDueDate: admin.firestore.Timestamp.fromDate(nextDueDate),
+            nextDueDay,
+        };
+
+        const planRef = await db.collection("users").doc(uid).collection("bnplPlans").add(plan);
+
+        const created = await planRef.get();
+        return { planId: planRef.id, plan: created.data() };
+    },
+);
