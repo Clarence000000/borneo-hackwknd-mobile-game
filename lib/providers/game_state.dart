@@ -152,11 +152,11 @@ class GameState extends ChangeNotifier {
     }
     _addMonthlyExpense('nextDayFee', kManualNextDayCost);
     _manualNextDayUsedToday++;
-    
+
     // Update player object for persistence
     player!.manualNextDayUsedToday = _manualNextDayUsedToday;
     player!.manualNextDayUsageDate = _manualNextDayUsageDate;
-    
+
     return true;
   }
 
@@ -180,15 +180,6 @@ class GameState extends ChangeNotifier {
       notifyListeners();
     });
     notifyListeners();
-  }
-
-  @override
-  void dispose() {
-    _dayCycleTimer?.cancel();
-    _loanSharkThreatTimer?.cancel();
-    _bnplPlansSub?.cancel();
-    _txSub?.cancel();
-    super.dispose();
   }
 
   Future<bool> takeLoanSharkLoan(double amount) async {
@@ -230,9 +221,9 @@ class GameState extends ChangeNotifier {
     currentDay = newPlayer.currentDay;
     _manualNextDayUsedToday = newPlayer.manualNextDayUsedToday;
     _manualNextDayUsageDate = newPlayer.manualNextDayUsageDate;
-    
+
     notifyListeners(); // Notify early so UI knows player/day is there
-    
+
     final savedGrid = await _firestore.getGrid(newPlayer.uid);
     if (savedGrid != null) {
       grid = savedGrid;
@@ -638,7 +629,7 @@ class GameState extends ChangeNotifier {
       final previousMonth = currentMonth;
       currentDay++;
       if (player != null) player!.currentDay = currentDay;
-      
+
       if (isManual) {
         _remainingCycleSeconds = kGameDayDurationMinutes * 60;
       }

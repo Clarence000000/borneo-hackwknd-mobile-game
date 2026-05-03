@@ -1,11 +1,30 @@
 {
-    "activeFile": "",
+    "activeFile": "level1.tmx",
     "expandedProjectPaths": [
+        "."
     ],
     "file.lastUsedOpenFilter": "All Files (*)",
     "fileStates": {
-        "level1.tmx#Hills": {
+        "": {
             "scaleInEditor": 1
+        },
+        "level1.tmx": {
+            "scale": 1.009375,
+            "selectedLayer": 2,
+            "viewCenter": {
+                "x": 744.5201238390093,
+                "y": 340.8049535603716
+            }
+        },
+        "level1.tmx#Grass": {
+            "scaleInDock": 1
+        },
+        "level1.tmx#Hills": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "level1.tmx#Water": {
+            "scaleInDock": 1
         }
     },
     "last.imagePath": "C:/Users/User/Desktop/borneo-hackathon-finals/borneo-hackwknd-mobile-game/assets/images",
@@ -13,9 +32,11 @@
     "map.tileHeight": 16,
     "map.tileWidth": 16,
     "openFiles": [
+        "level1.tmx"
     ],
     "project": "Richi.tiled-project",
     "recentFiles": [
+        "level1.tmx"
     ],
     "tileset.embedInMap": true,
     "tileset.tileSize": {
