@@ -1,15 +1,17 @@
 import 'package:flame/game.dart';
+import 'package:flame/events.dart';
 import 'package:flame_tiled/flame_tiled.dart';
 import 'package:flutter/painting.dart';
 
 import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/providers/game_state.dart';
+import 'player.dart';
 
 /// Main Flame game class — renders the Tiled map fullscreen, no scrolling.
 ///
 /// The map is scaled to cover the entire screen (no black borders).
 /// Camera is locked — no pan or zoom gestures.
-class RichiFarmGame extends FlameGame {
+class RichiFarmGame extends FlameGame with HasKeyboardHandlerComponents {
   final GameState gameState;
 
   /// The loaded Tiled map component.
@@ -31,6 +33,14 @@ class RichiFarmGame extends FlameGame {
     );
 
     world.add(_mapComponent);
+
+    // Initialize and add the player
+    final mapWidth = _mapComponent.tileMap.map.width * 16.0;
+    final mapHeight = _mapComponent.tileMap.map.height * 16.0;
+    
+    final player = Player();
+    player.position = Vector2(mapWidth / 2, mapHeight / 2);
+    world.add(player);
 
     // Fill the screen with the map.
     _fitMapToScreen();
