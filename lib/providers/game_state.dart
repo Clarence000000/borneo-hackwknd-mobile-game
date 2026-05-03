@@ -39,6 +39,8 @@ class GameState extends ChangeNotifier {
 
   // ── Financial ───────────────────────────────────────────────
   List<BnplPlan> bnplPlans = [];
+  StreamSubscription<List<BnplPlan>>? _bnplPlansSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _txSub;
   List<Loan> loans = [];
   List<Insurance> insurances = [];
 
@@ -180,6 +182,15 @@ class GameState extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
+  void dispose() {
+    _dayCycleTimer?.cancel();
+    _loanSharkThreatTimer?.cancel();
+    _bnplPlansSub?.cancel();
+    _txSub?.cancel();
+    super.dispose();
+  }
+
   Future<bool> takeLoanSharkLoan(double amount) async {
     if (player == null || amount <= 0) return false;
 
@@ -229,6 +240,18 @@ class GameState extends ChangeNotifier {
       _initGrid(); // Fallback to default
       await _saveGridState(); // Save the default grid
     }
+    // Subscribe to realtime BNPL plan updates and recent transactions
+    _bnplPlansSub?.cancel();
+    _bnplPlansSub = _firestore.streamBnplPlans(newPlayer.uid).listen((plans) {
+      bnplPlans = plans;
+      notifyListeners();
+    });
+
+    _txSub?.cancel();
+    _txSub = _firestore.streamTransactions(newPlayer.uid).listen((txs) {
+      // Optionally process transactions for credit scoring or UI
+      notifyListeners();
+    });
     notifyListeners();
   }
 

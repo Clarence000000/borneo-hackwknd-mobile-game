@@ -81,6 +81,32 @@ class FirestoreService {
         });
   }
 
+    /// Stream BNPL plans for a user for realtime updates
+    Stream<List<BnplPlan>> streamBnplPlans(String uid) {
+      return _db
+          .collection('users')
+          .doc(uid)
+          .collection('bnplPlans')
+          .orderBy('createdAt', descending: false)
+          .snapshots()
+          .map((snap) => snap.docs
+              .map((d) => BnplPlan.fromMap(d.id, d.data()))
+              .toList());
+    }
+
+    /// Stream recent transactions for a user (useful for realtime feed)
+    Stream<List<Map<String, dynamic>>> streamTransactions(String uid,
+        {int limit = 50}) {
+      return _db
+          .collection('users')
+          .doc(uid)
+          .collection('transactions')
+          .orderBy('timestamp', descending: true)
+          .limit(limit)
+          .snapshots()
+          .map((snap) => snap.docs.map((d) => d.data()).toList());
+    }
+
   /// Update the leaderboard rankings (simple implementation for now)
   Future<void> updateLeaderboard(Player player) async {
     await _db
