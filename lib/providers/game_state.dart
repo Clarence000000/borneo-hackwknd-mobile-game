@@ -949,13 +949,6 @@ class GameState extends ChangeNotifier {
   void refresh() {
     notifyListeners();
   }
-
-  @override
-  void dispose() {
-    _dayCycleTimer?.cancel();
-    _loanSharkThreatTimer?.cancel();
-    super.dispose();
-  }
 }
 
 class MonthlyPnLReport {
