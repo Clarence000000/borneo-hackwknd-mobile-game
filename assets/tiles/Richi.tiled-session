@@ -9,11 +9,11 @@
             "scaleInEditor": 1
         },
         "level1.tmx": {
-            "scale": 1.009375,
+            "scale": 1.5,
             "selectedLayer": 2,
             "viewCenter": {
-                "x": 744.5201238390093,
-                "y": 340.8049535603716
+                "x": 576.9999999999999,
+                "y": 319.33333333333326
             }
         },
         "level1.tmx#Grass": {
@@ -22,6 +22,9 @@
         "level1.tmx#Hills": {
             "scaleInDock": 1,
             "scaleInEditor": 1
+        },
+        "level1.tmx#Tilled_Dirt": {
+            "scaleInDock": 1
         },
         "level1.tmx#Water": {
             "scaleInDock": 1

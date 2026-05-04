@@ -8,6 +8,7 @@ import 'package:flutter/painting.dart';
 
 import 'package:farm_fintech/config/constants.dart';
 import 'package:farm_fintech/config/theme.dart';
+import 'package:farm_fintech/engine/components/building_component.dart';
 import 'package:farm_fintech/engine/components/crop_component.dart';
 import 'package:farm_fintech/engine/components/player_component.dart';
 import 'package:farm_fintech/engine/crop_image_registry.dart';
@@ -34,8 +35,14 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
   /// Player character.
   late PlayerComponent playerComponent;
 
-  /// Joystick (mobile only).
+  /// Joystick.
   JoystickComponent? joystick;
+
+  /// Buildings on the map.
+  final List<BuildingComponent> _buildings = [];
+
+  /// Callback when a building is tapped — set by GameScreen for navigation.
+  void Function(BuildingType type)? onBuildingTapped;
 
   RichiFarmGame({required this.gameState});
 
@@ -91,6 +98,27 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
       margin: const EdgeInsets.only(left: 40, bottom: 40),
     );
     camera.viewport.add(joystick!);
+
+    // ── Buildings ──────────────────────────────────────────
+    // Bank: ~3×4 tiles, placed near top-left
+    final bank = BuildingComponent(
+      buildingType: BuildingType.bank,
+      gridCol: 2,
+      gridRow: 2,
+      buildingSize: Vector2(48, 64), // 3×4 tiles
+    );
+    _buildings.add(bank);
+    world.add(bank);
+
+    // Merchant: ~3×3 tiles, placed a bit further
+    final merchant = BuildingComponent(
+      buildingType: BuildingType.merchant,
+      gridCol: 8,
+      gridRow: 2,
+      buildingSize: Vector2(48, 48), // 3×3 tiles
+    );
+    _buildings.add(merchant);
+    world.add(merchant);
 
     // Set up camera.
     _setupCamera();
@@ -154,6 +182,18 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
 
     final worldX = camX + (screenPos.dx - screenCenterX) / zoom;
     final worldY = camY + (screenPos.dy - screenCenterY) / zoom;
+
+    // Check if tap hit a building first.
+    for (final building in _buildings) {
+      if (building.containsWorldPoint(worldX, worldY)) {
+        developer.log(
+          'Tap → building ${building.buildingType.name}',
+          name: 'RichiFarmGame',
+        );
+        onBuildingTapped?.call(building.buildingType);
+        return; // Don't select a tile if we tapped a building.
+      }
+    }
 
     final map = _mapComponent.tileMap.map;
     final mapCol = (worldX / 16).floor().clamp(0, map.width - 1);
