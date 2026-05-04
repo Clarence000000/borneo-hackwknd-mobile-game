@@ -4,7 +4,6 @@ import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flame_tiled/flame_tiled.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
 import 'package:farm_fintech/config/constants.dart';
@@ -19,7 +18,7 @@ import 'package:farm_fintech/providers/game_state.dart';
 /// The map fills the screen (cover scaling). Camera follows the player or
 /// can be panned manually. Crops are [SpriteComponent]s placed on top of
 /// the tile map at grid positions.
-class RichiFarmGame extends FlameGame with PanDetector {
+class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerComponents {
   final GameState gameState;
 
   /// The loaded Tiled map component.
@@ -78,26 +77,20 @@ class RichiFarmGame extends FlameGame with PanDetector {
     playerComponent.mapHeight = _mapHeight;
     world.add(playerComponent);
 
-    // Mobile joystick
-    final isMobile =
-        defaultTargetPlatform == TargetPlatform.iOS ||
-        defaultTargetPlatform == TargetPlatform.android;
-
-    if (isMobile) {
-      joystick = JoystickComponent(
-        knob: CircleComponent(
-          radius: 15,
-          paint: Paint()..color = const Color(0xFFFFFFFF),
-        ),
-        background: CircleComponent(
-          radius: 50,
-          paint: Paint()..color = const Color(0x88FFFFFF),
-        ),
-        margin: const EdgeInsets.only(left: 40, bottom: 40),
-      );
-      camera.viewport.add(joystick!);
-      playerComponent.joystick = joystick;
-    }
+    // Joystick (always shown — on mobile it's the primary control,
+    // on desktop/web it's supplementary to WASD/arrow keys).
+    joystick = JoystickComponent(
+      knob: CircleComponent(
+        radius: 15,
+        paint: Paint()..color = const Color(0xFFFFFFFF),
+      ),
+      background: CircleComponent(
+        radius: 50,
+        paint: Paint()..color = const Color(0x88FFFFFF),
+      ),
+      margin: const EdgeInsets.only(left: 40, bottom: 40),
+    );
+    camera.viewport.add(joystick!);
 
     // Set up camera.
     _setupCamera();

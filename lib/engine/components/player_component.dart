@@ -1,49 +1,168 @@
 import 'package:flame/components.dart';
+import 'package:flame/sprite.dart';
+import 'package:flutter/services.dart';
+
+import 'package:farm_fintech/engine/richi_farm_game.dart';
+
+/// Character animation states (idle + walk × 4 directions).
+enum PlayerState {
+  walkDown,
+  walkUp,
+  walkLeft,
+  walkRight,
+  idleDown,
+  idleUp,
+  idleLeft,
+  idleRight,
+}
 
 /// A movable player character on the farm map.
 ///
-/// Controlled via [JoystickComponent] on mobile.
-/// Sprite: `assets/images/cat_walk.png`.
-class PlayerComponent extends SpriteComponent with HasGameReference {
-  static const double speed = 80.0; // pixels per second
-
-  /// External joystick reference (set by RichiFarmGame).
-  JoystickComponent? joystick;
+/// Uses [SpriteAnimationGroupComponent] to animate directional walk/idle
+/// from the `cat_walk.png` spritesheet (4 rows × 4 columns, 48×48 frames).
+///
+/// Controls: WASD / Arrow keys + Joystick.
+class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
+    with HasGameReference<RichiFarmGame>, KeyboardHandler {
+  static const double speed = 100.0; // pixels per second
 
   /// Map pixel bounds for clamping.
   double mapWidth = 0;
   double mapHeight = 0;
 
-  PlayerComponent();
+  // Keyboard input state.
+  int _horizontalDirection = 0;
+  int _verticalDirection = 0;
+
+  PlayerComponent() : super(size: Vector2(48, 48));
 
   @override
   Future<void> onLoad() async {
-    await super.onLoad();
+    // 1. Load the sprite sheet image
+    final walkImage = await game.images.load('cat_walk.png');
 
-    sprite = await Sprite.load('cat_walk.png');
-    size = Vector2(16, 16);
+    // 2. Define the grid (4 columns × 4 rows, 48×48 per frame)
+    final spriteSheet = SpriteSheet(
+      image: walkImage,
+      srcSize: Vector2(48, 48),
+    );
+
+    // 3. Slice into idle + walk animations
+    final idleDown = spriteSheet.createAnimation(
+      row: 0, stepTime: 0.6, from: 0, to: 2,
+    );
+    final idleUp = spriteSheet.createAnimation(
+      row: 1, stepTime: 0.6, from: 0, to: 2,
+    );
+    // Row 2 is Right, Row 3 is Left (sprite sheet layout)
+    final idleRight = spriteSheet.createAnimation(
+      row: 3, stepTime: 0.6, from: 0, to: 2,
+    );
+    final idleLeft = spriteSheet.createAnimation(
+      row: 2, stepTime: 0.6, from: 0, to: 2,
+    );
+
+    final walkDown = spriteSheet.createAnimation(
+      row: 0, stepTime: 0.15, from: 2, to: 4,
+    );
+    final walkUp = spriteSheet.createAnimation(
+      row: 1, stepTime: 0.15, from: 2, to: 4,
+    );
+    final walkRight = spriteSheet.createAnimation(
+      row: 3, stepTime: 0.15, from: 2, to: 4,
+    );
+    final walkLeft = spriteSheet.createAnimation(
+      row: 2, stepTime: 0.15, from: 2, to: 4,
+    );
+
+    // 4. Map states → animations
+    animations = {
+      PlayerState.walkDown: walkDown,
+      PlayerState.walkUp: walkUp,
+      PlayerState.walkLeft: walkLeft,
+      PlayerState.walkRight: walkRight,
+      PlayerState.idleDown: idleDown,
+      PlayerState.idleUp: idleUp,
+      PlayerState.idleLeft: idleLeft,
+      PlayerState.idleRight: idleRight,
+    };
+
+    current = PlayerState.idleDown;
     anchor = Anchor.center;
+    priority = 10; // Render on top of crops
+  }
 
-    // Render on top of crops.
-    priority = 10;
+  @override
+  bool onKeyEvent(KeyEvent event, Set<LogicalKeyboardKey> keysPressed) {
+    _horizontalDirection = 0;
+    _verticalDirection = 0;
+
+    if (keysPressed.contains(LogicalKeyboardKey.keyA) ||
+        keysPressed.contains(LogicalKeyboardKey.arrowLeft)) {
+      _horizontalDirection -= 1;
+    }
+    if (keysPressed.contains(LogicalKeyboardKey.keyD) ||
+        keysPressed.contains(LogicalKeyboardKey.arrowRight)) {
+      _horizontalDirection += 1;
+    }
+    if (keysPressed.contains(LogicalKeyboardKey.keyW) ||
+        keysPressed.contains(LogicalKeyboardKey.arrowUp)) {
+      _verticalDirection -= 1;
+    }
+    if (keysPressed.contains(LogicalKeyboardKey.keyS) ||
+        keysPressed.contains(LogicalKeyboardKey.arrowDown)) {
+      _verticalDirection += 1;
+    }
+
+    return true;
   }
 
   @override
   void update(double dt) {
-    super.update(dt);
+    var dx = _horizontalDirection.toDouble();
+    var dy = _verticalDirection.toDouble();
 
-    if (joystick == null) return;
+    // If no keyboard input, check joystick
+    if (dx == 0 && dy == 0 && game.joystick != null &&
+        game.joystick!.direction != JoystickDirection.idle) {
+      dx = game.joystick!.relativeDelta.x;
+      dy = game.joystick!.relativeDelta.y;
+    }
 
-    // Only move when joystick is actively being dragged.
-    if (!joystick!.isDragged) return;
+    if (dx == 0 && dy == 0) {
+      // Not moving → idle based on last walk direction
+      if (current == PlayerState.walkDown) {
+        current = PlayerState.idleDown;
+      } else if (current == PlayerState.walkUp) {
+        current = PlayerState.idleUp;
+      } else if (current == PlayerState.walkLeft) {
+        current = PlayerState.idleLeft;
+      } else if (current == PlayerState.walkRight) {
+        current = PlayerState.idleRight;
+      }
+    } else {
+      // Moving → normalize and apply
+      final direction = Vector2(dx, dy);
+      if (direction.length > 0) {
+        direction.normalize();
+      }
 
-    final delta = joystick!.relativeDelta * speed * dt;
-    position.add(delta);
+      position.add(direction * speed * dt);
 
-    // Clamp to map bounds.
+      // Pick animation based on dominant axis
+      if (dx.abs() > dy.abs()) {
+        current = dx > 0 ? PlayerState.walkRight : PlayerState.walkLeft;
+      } else {
+        current = dy > 0 ? PlayerState.walkDown : PlayerState.walkUp;
+      }
+    }
+
+    // Clamp to map bounds
     if (mapWidth > 0 && mapHeight > 0) {
       position.x = position.x.clamp(0, mapWidth);
       position.y = position.y.clamp(0, mapHeight);
     }
+
+    super.update(dt);
   }
 }
