@@ -2,8 +2,8 @@
 library;
 
 // ─── Grid & Tile ───────────────────────────────────────────────
-const int kGridCols = 30;
-const int kGridRows = 20;
+const int kGridCols = 60;
+const int kGridRows = 40;
 const double kTileWidth = 16.0;
 const double kTileHeight = 16.0;
 

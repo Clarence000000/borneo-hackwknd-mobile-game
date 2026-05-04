@@ -39,6 +39,7 @@ class _GameScreenState extends State<GameScreen> {
 
     final state = context.read<GameState>();
     _game = RichiFarmGame(gameState: state);
+    state.game = _game; // Wire up so GameState can sync crop sprites
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!(state.player?.tutorialCompleted ?? true)) {
@@ -90,7 +91,12 @@ class _GameScreenState extends State<GameScreen> {
           return Stack(
             children: [
               // ── Layer 0: Flame Game (Tiled map + camera) ────
-              GameWidget(game: _game),
+              GestureDetector(
+                onTapUp: (details) {
+                  _game.handleTap(details.localPosition);
+                },
+                child: GameWidget(game: _game),
+              ),
 
               // ── Layer 1: HUD Overlay ────────────────────────
               const HudOverlay(),

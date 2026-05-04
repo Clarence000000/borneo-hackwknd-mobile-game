@@ -1,23 +1,41 @@
-import 'package:flame/game.dart';
-import 'package:flame/events.dart';
-import 'package:flame_tiled/flame_tiled.dart';
+import 'dart:developer' as developer;
+
 import 'package:flame/components.dart';
-import 'package:flutter/painting.dart';
+import 'package:flame/events.dart';
+import 'package:flame/game.dart';
+import 'package:flame_tiled/flame_tiled.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 
+import 'package:farm_fintech/config/constants.dart';
 import 'package:farm_fintech/config/theme.dart';
+import 'package:farm_fintech/engine/components/crop_component.dart';
+import 'package:farm_fintech/engine/components/player_component.dart';
+import 'package:farm_fintech/engine/crop_image_registry.dart';
 import 'package:farm_fintech/providers/game_state.dart';
-import 'player.dart';
 
-/// Main Flame game class — renders the Tiled map fullscreen, no scrolling.
+/// Main Flame game class — renders the Tiled map with crops and player.
 ///
-/// The map is scaled to cover the entire screen (no black borders).
-/// Camera is locked — no pan or zoom gestures.
-class RichiFarmGame extends FlameGame with HasKeyboardHandlerComponents, DragCallbacks {
+/// The map fills the screen (cover scaling). Camera follows the player or
+/// can be panned manually. Crops are [SpriteComponent]s placed on top of
+/// the tile map at grid positions.
+class RichiFarmGame extends FlameGame with PanDetector {
   final GameState gameState;
 
   /// The loaded Tiled map component.
   late TiledComponent _mapComponent;
+
+  /// Map pixel dimensions (calculated from TMX metadata).
+  late double _mapWidth;
+  late double _mapHeight;
+
+  /// Active crop components, keyed by (col, row).
+  final Map<(int, int), CropComponent> _cropComponents = {};
+
+  /// Player character.
+  late PlayerComponent playerComponent;
+
+  /// Joystick (mobile only).
   JoystickComponent? joystick;
 
   RichiFarmGame({required this.gameState});
@@ -29,61 +47,210 @@ class RichiFarmGame extends FlameGame with HasKeyboardHandlerComponents, DragCal
   Future<void> onLoad() async {
     await super.onLoad();
 
+    // Wire up game reference so GameState can call back.
+    gameState.game = this;
+
     // Load the Tiled map from assets/tiles/level1.tmx.
-    _mapComponent = await TiledComponent.load(
-      'level1.tmx',
-      Vector2.all(16),
-    );
+    _mapComponent = await TiledComponent.load('level1.tmx', Vector2.all(16));
+
+    final map = _mapComponent.tileMap.map;
+    _mapWidth = map.width * map.tileWidth.toDouble();
+    _mapHeight = map.height * map.tileHeight.toDouble();
 
     world.add(_mapComponent);
 
-    // Initialize and add the player
-    final mapWidth = _mapComponent.tileMap.map.width * 16.0;
-    final mapHeight = _mapComponent.tileMap.map.height * 16.0;
-    
-    final player = Player();
-    player.position = Vector2(mapWidth / 2, mapHeight / 2);
-    world.add(player);
+    // Mark farmland tiles from the TMX Tilled_Dirt layer.
+    try {
+      gameState.markFarmableFromTiled(_mapComponent.tileMap.map);
+    } catch (e) {
+      developer.log('markFarmableFromTiled error: $e', name: 'RichiFarmGame');
+    }
 
-    final isMobile = defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android;
+    // Pre-cache crop sprites.
+    developer.log('Loading crop images...', name: 'RichiFarmGame');
+    await CropImageRegistry.loadAll();
+    developer.log('Crop images loaded', name: 'RichiFarmGame');
+
+    // ── Player character ──────────────────────────────────────
+    playerComponent = PlayerComponent();
+    playerComponent.position = Vector2(_mapWidth / 2, _mapHeight / 2);
+    playerComponent.mapWidth = _mapWidth;
+    playerComponent.mapHeight = _mapHeight;
+    world.add(playerComponent);
+
+    // Mobile joystick
+    final isMobile =
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.android;
 
     if (isMobile) {
       joystick = JoystickComponent(
-        knob: CircleComponent(radius: 15, paint: Paint()..color = const Color(0xFFFFFFFF)),
-        background: CircleComponent(radius: 50, paint: Paint()..color = const Color(0x88FFFFFF)),
+        knob: CircleComponent(
+          radius: 15,
+          paint: Paint()..color = const Color(0xFFFFFFFF),
+        ),
+        background: CircleComponent(
+          radius: 50,
+          paint: Paint()..color = const Color(0x88FFFFFF),
+        ),
         margin: const EdgeInsets.only(left: 40, bottom: 40),
       );
       camera.viewport.add(joystick!);
+      playerComponent.joystick = joystick;
     }
 
-    // Fill the screen with the map.
-    _fitMapToScreen();
+    // Set up camera.
+    _setupCamera();
   }
 
-  /// Scale and position the camera so the map covers the entire screen
-  /// with no black borders. Uses "cover" strategy (like CSS background-size: cover)
-  /// — the map may be slightly cropped on one axis but never shows edges.
-  void _fitMapToScreen() {
-    final mapWidth = _mapComponent.tileMap.map.width * 16.0;
-    final mapHeight = _mapComponent.tileMap.map.height * 16.0;
+  // ── Camera ──────────────────────────────────────────────────
 
-    // Center the camera on the map.
-    camera.viewfinder.position = Vector2(mapWidth / 2, mapHeight / 2);
+  void _setupCamera() {
+    if (size.x <= 0 || size.y <= 0) return;
 
-    if (size.x > 0 && size.y > 0) {
-      final scaleX = size.x / mapWidth;
-      final scaleY = size.y / mapHeight;
-      // Use the LARGER scale so the map fully covers the viewport.
-      // Add a tiny 5% buffer to guarantee no edge pixels leak through.
-      camera.viewfinder.zoom = (scaleX > scaleY ? scaleX : scaleY) * 1.05;
-    }
+    // "Cover" zoom — use the LARGER axis scale so no black borders show.
+    final scaleX = size.x / _mapWidth;
+    final scaleY = size.y / _mapHeight;
+    camera.viewfinder.zoom = scaleX > scaleY ? scaleX : scaleY;
+
+    // Center on the map initially.
+    camera.viewfinder.position = Vector2(_mapWidth / 2, _mapHeight / 2);
+    _clampCamera();
+  }
+
+  void _clampCamera() {
+    final zoom = camera.viewfinder.zoom;
+    final halfViewW = (size.x / zoom) / 2;
+    final halfViewH = (size.y / zoom) / 2;
+
+    final pos = camera.viewfinder.position;
+    pos.x = pos.x.clamp(halfViewW, _mapWidth - halfViewW);
+    pos.y = pos.y.clamp(halfViewH, _mapHeight - halfViewH);
+    camera.viewfinder.position = pos;
+  }
+
+  @override
+  void onPanUpdate(DragUpdateInfo info) {
+    final zoom = camera.viewfinder.zoom;
+    camera.viewfinder.position -= info.delta.global / zoom;
+    _clampCamera();
   }
 
   @override
   void onGameResize(Vector2 size) {
     super.onGameResize(size);
     if (isLoaded) {
-      _fitMapToScreen();
+      _setupCamera();
+    }
+  }
+
+  // ── Tap handling (called from GameScreen GestureDetector) ───
+
+  /// Convert a screen tap position to grid coordinates and select the tile.
+  void handleTap(Offset screenPos) {
+    if (size.x <= 0 || size.y <= 0) return;
+
+    final zoom = camera.viewfinder.zoom;
+    if (zoom <= 0) return;
+
+    final screenCenterX = size.x / 2;
+    final screenCenterY = size.y / 2;
+
+    final camX = camera.viewfinder.position.x;
+    final camY = camera.viewfinder.position.y;
+
+    final worldX = camX + (screenPos.dx - screenCenterX) / zoom;
+    final worldY = camY + (screenPos.dy - screenCenterY) / zoom;
+
+    final map = _mapComponent.tileMap.map;
+    final mapCol = (worldX / 16).floor().clamp(0, map.width - 1);
+    final mapRow = (worldY / 16).floor().clamp(0, map.height - 1);
+
+    developer.log(
+      'Tap → world(${worldX.toStringAsFixed(1)}, ${worldY.toStringAsFixed(1)}) → tile($mapCol, $mapRow)',
+      name: 'RichiFarmGame',
+    );
+
+    gameState.selectTile((mapCol, mapRow));
+  }
+
+  // ── Crop component management ──────────────────────────────
+
+  /// Add a crop sprite at the given grid position.
+  void addCropComponent(int col, int row, CropType cropType, int stage) {
+    // Remove existing crop at this position if any.
+    removeCropComponent(col, row);
+
+    final crop = CropComponent(
+      cropType: cropType,
+      gridCol: col,
+      gridRow: row,
+      initialStage: stage,
+    );
+    _cropComponents[(col, row)] = crop;
+    world.add(crop);
+
+    developer.log(
+      'Added ${cropType.name} crop at ($col, $row) stage $stage',
+      name: 'RichiFarmGame',
+    );
+  }
+
+  /// Remove the crop sprite at the given grid position.
+  void removeCropComponent(int col, int row) {
+    final existing = _cropComponents.remove((col, row));
+    if (existing != null) {
+      existing.removeFromParent();
+      developer.log(
+        'Removed crop at ($col, $row)',
+        name: 'RichiFarmGame',
+      );
+    }
+  }
+
+  /// Update the growth stage of the crop at the given position.
+  void updateCropStage(int col, int row, int newStage) {
+    final crop = _cropComponents[(col, row)];
+    if (crop != null) {
+      crop.updateStage(newStage);
+    }
+  }
+
+  /// Bulk-sync all crop components from the GameState grid.
+  ///
+  /// Called after day advance or loading saved state to ensure
+  /// the visual sprites match the logical tile state.
+  void syncCropsFromGameState() {
+    final grid = gameState.grid;
+
+    // Track which positions have active crops in GameState.
+    final activeCropPositions = <(int, int)>{};
+
+    for (int row = 0; row < grid.length; row++) {
+      for (int col = 0; col < grid[row].length; col++) {
+        final tile = grid[row][col];
+        if (tile.hasCrop) {
+          activeCropPositions.add((col, row));
+          final existing = _cropComponents[(col, row)];
+          if (existing != null) {
+            // Crop exists — update stage if needed.
+            if (existing.currentStage != tile.growthStage) {
+              existing.updateStage(tile.growthStage);
+            }
+          } else {
+            // Crop is new — add component.
+            addCropComponent(col, row, tile.crop!, tile.growthStage);
+          }
+        }
+      }
+    }
+
+    // Remove crops that no longer exist in GameState (harvested/destroyed).
+    final toRemove = _cropComponents.keys
+        .where((pos) => !activeCropPositions.contains(pos))
+        .toList();
+    for (final pos in toRemove) {
+      removeCropComponent(pos.$1, pos.$2);
     }
   }
 }

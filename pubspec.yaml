@@ -71,6 +71,7 @@ flutter:
   assets:
     - .env.local
     - assets/images/
+    - assets/images/crops/
     - assets/tiles/
   #   - images/a_dot_ham.jpeg
 
