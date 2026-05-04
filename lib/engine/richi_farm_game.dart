@@ -1,7 +1,9 @@
 import 'package:flame/game.dart';
 import 'package:flame/events.dart';
 import 'package:flame_tiled/flame_tiled.dart';
+import 'package:flame/components.dart';
 import 'package:flutter/painting.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/providers/game_state.dart';
@@ -11,11 +13,12 @@ import 'player.dart';
 ///
 /// The map is scaled to cover the entire screen (no black borders).
 /// Camera is locked — no pan or zoom gestures.
-class RichiFarmGame extends FlameGame with HasKeyboardHandlerComponents {
+class RichiFarmGame extends FlameGame with HasKeyboardHandlerComponents, DragCallbacks {
   final GameState gameState;
 
   /// The loaded Tiled map component.
   late TiledComponent _mapComponent;
+  JoystickComponent? joystick;
 
   RichiFarmGame({required this.gameState});
 
@@ -41,6 +44,17 @@ class RichiFarmGame extends FlameGame with HasKeyboardHandlerComponents {
     final player = Player();
     player.position = Vector2(mapWidth / 2, mapHeight / 2);
     world.add(player);
+
+    final isMobile = defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android;
+
+    if (isMobile) {
+      joystick = JoystickComponent(
+        knob: CircleComponent(radius: 15, paint: Paint()..color = const Color(0xFFFFFFFF)),
+        background: CircleComponent(radius: 50, paint: Paint()..color = const Color(0x88FFFFFF)),
+        margin: const EdgeInsets.only(left: 40, bottom: 40),
+      );
+      camera.viewport.add(joystick!);
+    }
 
     // Fill the screen with the map.
     _fitMapToScreen();

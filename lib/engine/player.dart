@@ -8,7 +8,7 @@ import 'richi_farm_game.dart';
 enum PlayerState { walkDown, walkUp, walkLeft, walkRight, idleDown, idleUp, idleLeft, idleRight }
 
 class Player extends SpriteAnimationGroupComponent<PlayerState> with HasGameReference<RichiFarmGame>, KeyboardHandler {
-  Player() : super(size: Vector2(32, 32)); // Adjust size based on your pixel art
+  Player() : super(size: Vector2(64, 64)); // Adjust size based on your pixel art
 
   // Movement speed in pixels per second
   static const double speed = 100.0;
@@ -83,7 +83,16 @@ class Player extends SpriteAnimationGroupComponent<PlayerState> with HasGameRefe
 
   @override
   void update(double dt) {
-    if (horizontalDirection == 0 && verticalDirection == 0) {
+    double dx = horizontalDirection.toDouble();
+    double dy = verticalDirection.toDouble();
+
+    // If there's no keyboard input, check the joystick
+    if (dx == 0 && dy == 0 && game.joystick != null && game.joystick!.direction != JoystickDirection.idle) {
+      dx = game.joystick!.relativeDelta.x;
+      dy = game.joystick!.relativeDelta.y;
+    }
+
+    if (dx == 0 && dy == 0) {
       // Not moving, set to idle based on last direction
       if (current == PlayerState.walkDown) {
         current = PlayerState.idleDown;
@@ -96,7 +105,7 @@ class Player extends SpriteAnimationGroupComponent<PlayerState> with HasGameRefe
       }
     } else {
       // Moving
-      final direction = Vector2(horizontalDirection.toDouble(), verticalDirection.toDouble());
+      final direction = Vector2(dx, dy);
       if (direction.length > 0) {
         direction.normalize();
       }
@@ -104,10 +113,10 @@ class Player extends SpriteAnimationGroupComponent<PlayerState> with HasGameRefe
       position.add(direction * speed * dt);
 
       // Update animation state based on movement direction
-      if (direction.x.abs() > direction.y.abs()) {
-        current = direction.x > 0 ? PlayerState.walkRight : PlayerState.walkLeft;
+      if (dx.abs() > dy.abs()) {
+        current = dx > 0 ? PlayerState.walkRight : PlayerState.walkLeft;
       } else {
-        current = direction.y > 0 ? PlayerState.walkDown : PlayerState.walkUp;
+        current = dy > 0 ? PlayerState.walkDown : PlayerState.walkUp;
       }
     }
 
