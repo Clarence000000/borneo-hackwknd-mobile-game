@@ -7,6 +7,7 @@ import 'package:farm_fintech/config/constants.dart';
 import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/models/weather_event.dart';
+import 'package:farm_fintech/engine/crop_image_registry.dart';
 import 'package:farm_fintech/screens/bank_screen.dart';
 import 'package:farm_fintech/screens/profile_screen.dart';
 import 'package:farm_fintech/screens/merchant_screen.dart';
@@ -122,8 +123,10 @@ class _HudOverlayState extends State<HudOverlay> {
                         // Cash badge
                         _HudBadge(
                           icon: Icons.monetization_on,
-                          label:
-                              CurrencyUtil.format(displayCash, displayCountry),
+                          label: CurrencyUtil.format(
+                            displayCash,
+                            displayCountry,
+                          ),
                           color: GameColors.uiGold,
                         ),
                         const SizedBox(width: 6),
@@ -177,9 +180,9 @@ class _HudOverlayState extends State<HudOverlay> {
                         const SizedBox(width: 6),
 
                         _HudBadge(
-                           icon: Icons.inventory_2,
-                           label: '${player.totalInventoryItems}',
-                           color: GameColors.uiAccent,
+                          icon: Icons.inventory_2,
+                          label: '${player.totalInventoryItems}',
+                          color: GameColors.uiAccent,
                         ),
                         const SizedBox(width: 6),
 
@@ -196,13 +199,13 @@ class _HudOverlayState extends State<HudOverlay> {
                           icon: Icons.agriculture,
                           label: state.tractorOwned
                               ? (state.autoHarvestEnabled
-                                  ? 'Tractor Active'
-                                  : 'Tractor Paused')
+                                    ? 'Tractor Active'
+                                    : 'Tractor Paused')
                               : 'No Tractor',
                           color: state.tractorOwned
                               ? (state.autoHarvestEnabled
-                                  ? GameColors.uiGreen
-                                  : GameColors.uiGold)
+                                    ? GameColors.uiGreen
+                                    : GameColors.uiGold)
                               : GameColors.uiTextDim,
                         ),
 
@@ -233,6 +236,38 @@ class _HudOverlayState extends State<HudOverlay> {
                           icon: Icons.wb_sunny,
                           label: state.gameDateLabel,
                           color: GameColors.uiHighlight,
+                        ),
+                        const SizedBox(width: 8),
+                        // Debug: crop image load indicators
+                        _HudChip(
+                          children: [
+                            const Text('W:'),
+                            const SizedBox(width: 6),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (var i = 0; i < 4; i++)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 2,
+                                    ),
+                                    child: Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(
+                                        color:
+                                            CropImageRegistry.getLoadedStages(
+                                              CropType.wheat,
+                                            )[i]
+                                            ? GameColors.uiGreen
+                                            : GameColors.uiTextDim,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -279,8 +314,9 @@ class _HudOverlayState extends State<HudOverlay> {
                             onPressed: () {
                               state.advanceDay().then((ok) {
                                 if (!ok && context.mounted) {
-                                  final messenger =
-                                      ScaffoldMessenger.of(context);
+                                  final messenger = ScaffoldMessenger.of(
+                                    context,
+                                  );
                                   messenger
                                     ..hideCurrentSnackBar()
                                     ..clearSnackBars();
@@ -478,9 +514,8 @@ class _HudOverlayState extends State<HudOverlay> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => LeaderboardScreen(
-                                    player: player,
-                                  ),
+                                  builder: (_) =>
+                                      LeaderboardScreen(player: player),
                                 ),
                               );
                             },

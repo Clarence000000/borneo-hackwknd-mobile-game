@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:farm_fintech/config/constants.dart';
 import 'package:farm_fintech/engine/camera.dart';
 import 'package:farm_fintech/engine/isometric_engine.dart';
+import 'package:farm_fintech/engine/richi_farm_game.dart';
 import 'package:farm_fintech/models/player.dart';
 import 'package:farm_fintech/models/tile.dart';
 import 'package:farm_fintech/models/weather_event.dart';
@@ -25,6 +26,20 @@ class GameState extends ChangeNotifier {
   final FirestoreService _firestore = FirestoreService();
   final Random _random = Random();
 
+  // ── Tiled Map Integration (for runtime crop growth stage display) ────
+  RichiFarmGame? game; // Optional reference to update tile GIDs
+
+  /// Crop GID mappings by stage.
+  /// These values are calibrated to the three visible 4-frame rows in Basic_Plants.png.
+  static const Map<CropType, List<int>> cropGidsByStage = {
+    // Row 1: seed bag -> sprout -> tall stalk -> mature plant
+    CropType.wheat: [258, 259, 260, 261], // stage 0..3 GIDs for wheat
+    // Row 2: alternate crop row
+    CropType.rice: [262, 263, 264, 265], // stage 0..3 GIDs for rice
+    // Row 3: alternate crop row
+    CropType.corn: [266, 267, 268, 269], // stage 0..3 GIDs for corn
+  };
+
   // ── Player ──────────────────────────────────────────────────
   Player? player;
 
@@ -33,6 +48,11 @@ class GameState extends ChangeNotifier {
 
   // ── Selection ───────────────────────────────────────────────
   (int, int)? selectedTile;
+
+  void selectTile((int, int)? tile) {
+    selectedTile = tile;
+    notifyListeners();
+  }
 
   // ── Weather ─────────────────────────────────────────────────
   DisasterType activeDisaster = DisasterType.none;
@@ -66,9 +86,226 @@ class GameState extends ChangeNotifier {
   // ── Crop selection for planting ─────────────────────────────
   CropType? selectedCropToPlant;
 
-  GameState() {
+  GameState({this.game}) {
     _initGrid();
     _startDayCycleClock();
+  }
+
+  /// Mark farmable tiles based on a Tiled map's `FarmableArea` object layer.
+  ///
+  /// Expects an Object Layer named `FarmableArea` where each object
+  /// represents a farmable tile (rectangle or point). Coordinates from
+  /// Tiled are in pixels; we convert to grid col/row using `kTileWidth`.
+  void markFarmableFromTiled(dynamic tiledMap) {
+    try {
+      if (tiledMap == null) return;
+
+      final layers = tiledMap.layers;
+      if (layers == null) return;
+
+      for (final layer in layers) {
+        final name = (layer.name as String?)?.trim();
+        if (name == null) continue;
+        final normalizedName = name.toLowerCase();
+        if (normalizedName != 'farmablearea' &&
+            normalizedName != 'tilled_dirt') {
+          continue;
+        }
+
+        final layerProps = _extractTiledProperties(layer);
+
+        // Support object layers
+        final objects = layer.objects;
+        if (objects != null) {
+          for (final obj in objects) {
+            final typeRaw = ((obj.type as String?) ?? '').toLowerCase();
+            if (typeRaw.isNotEmpty && typeRaw != 'farmplot') {
+              continue;
+            }
+
+            final mergedProps = <String, dynamic>{
+              ...layerProps,
+              ..._extractTiledProperties(obj),
+            };
+
+            // Tiled object coordinates are in pixels; map object rectangle
+            // to tile range so one object can represent N x M plots.
+            final dx = (obj.x as num?)?.toDouble() ?? 0.0;
+            final dy = (obj.y as num?)?.toDouble() ?? 0.0;
+            final w = (obj.width as num?)?.toDouble() ?? kTileWidth;
+            final h = (obj.height as num?)?.toDouble() ?? kTileHeight;
+
+            final startCol = (dx / kTileWidth).floor().clamp(0, kGridCols - 1);
+            final startRow = (dy / kTileHeight).floor().clamp(0, kGridRows - 1);
+            final endCol =
+                ((dx + (w <= 0 ? kTileWidth : w) - 0.001) / kTileWidth)
+                    .floor()
+                    .clamp(0, kGridCols - 1);
+            final endRow =
+                ((dy + (h <= 0 ? kTileHeight : h) - 0.001) / kTileHeight)
+                    .floor()
+                    .clamp(0, kGridRows - 1);
+
+            for (var row = startRow; row <= endRow; row++) {
+              for (var col = startCol; col <= endCol; col++) {
+                _applyFarmPlotFromTiledProperties(grid[row][col], mergedProps);
+              }
+            }
+          }
+        }
+
+        // If it's a tile layer instead, mark non-zero GIDs as farmland
+        try {
+          final data = layer.data;
+          if (data != null) {
+            final mapWidth = tiledMap.width as int? ?? kGridCols;
+            for (var idx = 0; idx < data.length; idx++) {
+              final gid = data[idx] as int? ?? 0;
+              if (gid != 0) {
+                final r = (idx / mapWidth).floor();
+                final c = idx % mapWidth;
+                if (r >= 0 && r < grid.length && c >= 0 && c < grid[0].length) {
+                  _applyFarmPlotFromTiledProperties(grid[r][c], layerProps);
+                }
+              }
+            }
+          }
+        } catch (_) {
+          // ignore — not a tile layer or unexpected format
+        }
+      }
+
+      notifyListeners();
+    } catch (e) {
+      // ignore errors — best-effort marking
+    }
+  }
+
+  Map<String, dynamic> _extractTiledProperties(dynamic node) {
+    final out = <String, dynamic>{};
+    try {
+      final props = node.properties;
+      if (props == null) return out;
+
+      if (props is Map) {
+        for (final entry in props.entries) {
+          out['${entry.key}'.toLowerCase()] = entry.value;
+        }
+        return out;
+      }
+
+      if (props is List) {
+        for (final p in props) {
+          final key = (p.name as String?)?.toLowerCase();
+          if (key == null || key.isEmpty) continue;
+          out[key] = p.value;
+        }
+      }
+    } catch (_) {}
+    return out;
+  }
+
+  void _applyFarmPlotFromTiledProperties(
+    Tile tile,
+    Map<String, dynamic> props,
+  ) {
+    tile.type = TileType.farmland;
+
+    final state = _parseFarmPlotState(props['farmstate'] ?? props['state']);
+    final crop = _parseCropType(props['crop']);
+    final growthStage = _parseInt(props['growthstage']);
+    final plantedDay = _parseInt(props['plantedday']);
+    final readyDay = _parseInt(props['readyday']);
+    final witherAfterDays = _parseInt(props['witherafterdays']);
+    final allowWither = _parseBool(props['allowwither']);
+
+    if (state != null) {
+      tile.setFarmStateFromTiled(
+        state,
+        cropType: crop,
+        stage: growthStage,
+        plantedDayValue: plantedDay,
+        readyDayValue: readyDay,
+        witherDays: witherAfterDays,
+        witherEnabled: allowWither,
+        currentDay: currentDay,
+      );
+      return;
+    }
+
+    if (witherAfterDays != null) {
+      tile.witherAfterDays = witherAfterDays;
+    }
+    if (allowWither != null) {
+      tile.allowWither = allowWither;
+    }
+
+    if (crop != null) {
+      tile.crop = crop;
+      tile.farmState = FarmPlotState.planted;
+    }
+    if (plantedDay != null) {
+      tile.plantedDay = plantedDay;
+    }
+    if (growthStage != null) {
+      tile.growthStage = growthStage.clamp(0, 3);
+      if (tile.growthStage == 0) {
+        tile.farmState = FarmPlotState.planted;
+      } else if (tile.growthStage < 3) {
+        tile.farmState = FarmPlotState.growing;
+      } else {
+        tile.farmState = FarmPlotState.ready;
+        tile.readyDay ??= currentDay;
+      }
+    }
+  }
+
+  FarmPlotState? _parseFarmPlotState(dynamic raw) {
+    if (raw == null) return null;
+    final value = raw.toString().trim().toLowerCase();
+    switch (value) {
+      case 'idle':
+        return FarmPlotState.idle;
+      case 'planted':
+        return FarmPlotState.planted;
+      case 'growing':
+        return FarmPlotState.growing;
+      case 'ready':
+      case 'harvestable':
+        return FarmPlotState.ready;
+      case 'withered':
+      case 'dead':
+        return FarmPlotState.ready;
+      default:
+        return null;
+    }
+  }
+
+  CropType? _parseCropType(dynamic raw) {
+    if (raw == null) return null;
+    final value = raw.toString().trim().toLowerCase();
+    for (final crop in CropType.values) {
+      if (crop.name.toLowerCase() == value) {
+        return crop;
+      }
+    }
+    return null;
+  }
+
+  int? _parseInt(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse(raw.toString().trim());
+  }
+
+  bool? _parseBool(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is bool) return raw;
+    final value = raw.toString().trim().toLowerCase();
+    if (value == 'true' || value == '1' || value == 'yes') return true;
+    if (value == 'false' || value == '0' || value == 'no') return false;
+    return null;
   }
 
   int get remainingCycleSeconds => _remainingCycleSeconds;
@@ -224,13 +461,10 @@ class GameState extends ChangeNotifier {
 
     notifyListeners(); // Notify early so UI knows player/day is there
 
-    final savedGrid = await _firestore.getGrid(newPlayer.uid);
-    if (savedGrid != null) {
-      grid = savedGrid;
-    } else {
-      _initGrid(); // Fallback to default
-      await _saveGridState(); // Save the default grid
-    }
+    // Always use fresh _initGrid() to ensure correct farmland layout
+    // This overrides any old grid data saved in Firestore
+    _initGrid();
+    await _saveGridState(); // Save the fresh grid
     // Subscribe to realtime BNPL plan updates and recent transactions
     _bnplPlansSub?.cancel();
     _bnplPlansSub = _firestore.streamBnplPlans(newPlayer.uid).listen((plans) {
@@ -317,8 +551,47 @@ class GameState extends ChangeNotifier {
         if (col == 7 && row == 7) {
           return Tile(col: col, row: row, type: TileType.water);
         }
-        // Starting farmland (3x3 area in center)
-        if (col >= 3 && col <= 5 && row >= 3 && row <= 5) {
+        // Farmland regions (extracted from Tiled Tilled_Dirt layer)
+        if (col >= 8 && col <= 10 && row >= 12 && row <= 14) {
+          return Tile(col: col, row: row, type: TileType.farmland);
+        }
+        if (col >= 16 && col <= 18 && row >= 12 && row <= 14) {
+          return Tile(col: col, row: row, type: TileType.farmland);
+        }
+        if (col >= 23 && col <= 25 && row >= 12 && row <= 26) {
+          return Tile(col: col, row: row, type: TileType.farmland);
+        }
+        if (col >= 27 && col <= 29 && row >= 12 && row <= 26) {
+          return Tile(col: col, row: row, type: TileType.farmland);
+        }
+        if (col >= 8 && col <= 10 && row >= 16 && row <= 18) {
+          return Tile(col: col, row: row, type: TileType.farmland);
+        }
+        if (col >= 16 && col <= 18 && row >= 16 && row <= 18) {
+          return Tile(col: col, row: row, type: TileType.farmland);
+        }
+        if (col >= 4 && col <= 6 && row >= 20 && row <= 22) {
+          return Tile(col: col, row: row, type: TileType.farmland);
+        }
+        if (col >= 8 && col <= 10 && row >= 20 && row <= 22) {
+          return Tile(col: col, row: row, type: TileType.farmland);
+        }
+        if (col >= 12 && col <= 14 && row >= 20 && row <= 22) {
+          return Tile(col: col, row: row, type: TileType.farmland);
+        }
+        if (col >= 16 && col <= 18 && row >= 20 && row <= 22) {
+          return Tile(col: col, row: row, type: TileType.farmland);
+        }
+        if (col >= 4 && col <= 6 && row >= 24 && row <= 26) {
+          return Tile(col: col, row: row, type: TileType.farmland);
+        }
+        if (col >= 8 && col <= 10 && row >= 24 && row <= 26) {
+          return Tile(col: col, row: row, type: TileType.farmland);
+        }
+        if (col >= 12 && col <= 14 && row >= 24 && row <= 26) {
+          return Tile(col: col, row: row, type: TileType.farmland);
+        }
+        if (col >= 16 && col <= 18 && row >= 24 && row <= 26) {
           return Tile(col: col, row: row, type: TileType.farmland);
         }
         return Tile(col: col, row: row, type: TileType.grass);
@@ -362,9 +635,7 @@ class GameState extends ChangeNotifier {
       return false;
     }
 
-    if (!tile.plant(cropType)) return false;
-
-    tile.plantedDay = currentDay;
+    if (!tile.plant(cropType, currentDay: currentDay)) return false;
 
     final previousCashBalance = player!.cashBalance;
     final previousBankBalance = player!.bankBalance;
@@ -379,12 +650,16 @@ class GameState extends ChangeNotifier {
 
     try {
       await _savePlayerState();
+      syncCropGidsInTiledMap();
       notifyListeners();
       return true;
     } catch (_) {
       tile.crop = null;
       tile.growthStage = 0;
       tile.plantedAt = null;
+      tile.plantedDay = null;
+      tile.readyDay = null;
+      tile.farmState = FarmPlotState.idle;
       player!.cashBalance = previousCashBalance;
       player!.bankBalance = previousBankBalance;
       _addMonthlyExpense('seed', -cost);
@@ -413,6 +688,7 @@ class GameState extends ChangeNotifier {
     try {
       await _savePlayerState();
       await _saveGridState();
+      syncCropGidsInTiledMap();
       notifyListeners();
       return harvested;
     } catch (_) {
@@ -420,12 +696,76 @@ class GameState extends ChangeNotifier {
       tile.growthStage = previousGrowthStage;
       tile.plantedAt = previousPlantedAt;
       tile.plantedDay = previousPlantedDay;
+      tile.farmState = previousCrop == null
+          ? FarmPlotState.idle
+          : (previousGrowthStage >= 3
+                ? FarmPlotState.ready
+                : previousGrowthStage <= 0
+                ? FarmPlotState.planted
+                : FarmPlotState.growing);
       if (previousQuantity > 0) {
         player!.inventory[key] = previousQuantity;
       } else {
         player!.inventory.remove(key);
       }
       return null;
+    }
+  }
+
+  /// Sync all crop tiles in the Tiled map with their current growth stages.
+  ///
+  /// This updates the GID (tile graphic ID) for each crop in the 'Crops' layer
+  /// to reflect the current growthStage. Call this after advancing a day or
+  /// when crop growth is updated.
+  ///
+  /// Requires: game reference set and cropGidsByStage configured with actual GIDs.
+  void syncCropGidsInTiledMap() {
+    if (game == null) {
+      print(
+        '[GameState] RichiFarmGame reference not set, skipping Tiled GID sync',
+      );
+      return;
+    }
+
+    // Try common layer names used in maps: prefer explicit 'Crops',
+    // fall back to 'Tilled_Dirt' if present.
+    final candidateNames = ['Crops', 'Tilled_Dirt'];
+    String? foundLayerName;
+    for (final candidate in candidateNames) {
+      try {
+        if (game!.hasLayer(candidate)) {
+          foundLayerName = candidate;
+          break;
+        }
+      } catch (_) {}
+    }
+    if (foundLayerName == null) {
+      print('[GameState] No suitable tile layer found (tried ${candidateNames.join(', ')}), skipping sync');
+      return;
+    }
+    final layerName = foundLayerName;
+    int syncedCount = 0;
+
+    for (int row = 0; row < grid.length; row++) {
+      for (int col = 0; col < grid[row].length; col++) {
+        final tile = grid[row][col];
+
+        final crop = tile.crop;
+        if (crop != null) {
+          final gids = cropGidsByStage[crop];
+          if (gids != null && gids.isNotEmpty) {
+            final stageIdx = tile.growthStage.clamp(0, gids.length - 1);
+            final newGid = gids[stageIdx];
+
+            game!.setTileGidAt(layerName, col, row, newGid);
+            syncedCount++;
+          }
+        }
+      }
+    }
+
+    if (syncedCount > 0) {
+      print('[GameState] Synced $syncedCount crop tiles in Tiled map');
     }
   }
 
@@ -531,9 +871,19 @@ class GameState extends ChangeNotifier {
 
     for (final row in grid) {
       for (final tile in row) {
-        if (!tile.hasCrop || tile.growthStage >= 3) continue;
+        if (!tile.hasCrop || tile.growthStage >= 3) {
+          continue;
+        }
         previousGrowthStages[tile] = tile.growthStage;
         tile.growthStage = (tile.growthStage + 1).clamp(0, 3);
+        if (tile.growthStage >= 3) {
+          tile.farmState = FarmPlotState.ready;
+          tile.readyDay ??= currentDay;
+        } else if (tile.growthStage >= 1) {
+          tile.farmState = FarmPlotState.growing;
+        } else {
+          tile.farmState = FarmPlotState.planted;
+        }
         boostedCount++;
       }
     }
@@ -634,24 +984,23 @@ class GameState extends ChangeNotifier {
         _remainingCycleSeconds = kGameDayDurationMinutes * 60;
       }
 
-      // Grow crops based on in-game days
+      // Grow crops based on in-game days using FarmPlot state machine
       for (final row in grid) {
         for (final tile in row) {
           if (tile.hasCrop && tile.growthStage < 3) {
             final config = kCropConfig[tile.crop!]!;
             final growthDays = config['growthDays'] as int;
-            final daysSincePlant = tile.plantedDay != null
-                ? currentDay - tile.plantedDay!
-                : 0;
-
-            // Simple growth: divide total growth time into 3 stages
-            final stageInterval = growthDays ~/ 3;
-            if (stageInterval > 0) {
-              tile.growthStage = (daysSincePlant ~/ stageInterval).clamp(0, 3);
-            } else {
-              // If growth is less than 3 days, grow 1 stage per day
-              tile.growthStage = daysSincePlant.clamp(0, 3);
-            }
+            tile.advanceLifecycle(
+              currentDay: currentDay,
+              growthDays: growthDays,
+            );
+          } else if (tile.hasCrop && tile.growthStage >= 3) {
+            final config = kCropConfig[tile.crop!]!;
+            final growthDays = config['growthDays'] as int;
+            tile.advanceLifecycle(
+              currentDay: currentDay,
+              growthDays: growthDays,
+            );
           }
         }
       }
@@ -757,6 +1106,9 @@ class GameState extends ChangeNotifier {
           reportMonth: previousMonth,
         );
       }
+
+      // Sync crop growth stages to Tiled map
+      syncCropGidsInTiledMap();
 
       return true;
     } finally {

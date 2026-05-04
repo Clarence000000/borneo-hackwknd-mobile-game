@@ -90,7 +90,13 @@ class _GameScreenState extends State<GameScreen> {
           return Stack(
             children: [
               // ── Layer 0: Flame Game (Tiled map + camera) ────
-              GameWidget(game: _game),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (details) {
+                  _game.handleTap(details.localPosition);
+                },
+                child: GameWidget(game: _game),
+              ),
 
               // ── Layer 1: HUD Overlay ────────────────────────
               const HudOverlay(),
@@ -217,6 +223,15 @@ class _GameScreenState extends State<GameScreen> {
                     fontSize: 13,
                   ),
                 ),
+                if (tile.isFarmland)
+                  Text(
+                    'STATE: ${tile.farmState.name.toUpperCase()}',
+                    style: const TextStyle(
+                      color: GameColors.uiHighlight,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 if (tile.hasCrop && !tile.isHarvestable)
                   Text(
                     '${tile.crop!.name.toUpperCase()} — Stage ${tile.growthStage}/3',
@@ -234,7 +249,7 @@ class _GameScreenState extends State<GameScreen> {
             ),
             const Spacer(),
             // Action buttons (horizontal)
-            if (tile.isFarmland && !tile.hasCrop) ..._buildPlantChips(state),
+            if (tile.isFarmland && tile.canPlant) ..._buildPlantChips(state),
             if (tile.isHarvestable) _buildHarvestChip(state),
             // Close button
             const SizedBox(width: 8),

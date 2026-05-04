@@ -1,9 +1,12 @@
+import 'dart:developer' as developer;
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
 import 'package:farm_fintech/config/constants.dart';
 import 'package:farm_fintech/config/theme.dart';
+import 'package:farm_fintech/engine/crop_image_registry.dart';
 
 /// Pure code-based pixel art drawing helpers.
 ///
@@ -21,21 +24,49 @@ class SpritePainter {
     CropType type,
     int growthStage, // 0=seed, 1=sprout, 2=growing, 3=mature/harvestable
   ) {
+    // Try to draw an image for this crop stage if available
+    final ui.Image? img = CropImageRegistry.getImage(type, growthStage);
+    if (img != null) {
+      // Scale image to fit tile — target box around position
+      final targetSize = switch (growthStage) {
+        0 => 10.0,
+        1 => 14.0,
+        2 => 20.0,
+        3 => 28.0,
+        _ => 12.0,
+      };
+      final dst = Rect.fromCenter(
+        center: position,
+        width: targetSize,
+        height: targetSize,
+      );
+      paintImage(canvas: canvas, rect: dst, image: img, fit: BoxFit.contain);
+      developer.log(
+        'Drawing image for ${type.name} stage $growthStage at $position',
+        name: 'SpritePainter',
+      );
+      return;
+    }
+
+    // Fallback: emoji procedural drawing (keeps existing look if no assets)
     String emoji;
     switch (type) {
       case CropType.wheat:
         emoji = '🌾';
+        break;
       case CropType.rice:
         emoji = '🌱';
+        break;
       case CropType.corn:
         emoji = '🌽';
+        break;
     }
 
     final size = switch (growthStage) {
-      0 => 8.0, // seed - tiny
-      1 => 12.0, // sprout - small
-      2 => 18.0, // growing - medium
-      3 => 24.0, // mature - large
+      0 => 8.0,
+      1 => 12.0,
+      2 => 18.0,
+      3 => 24.0,
       _ => 8.0,
     };
 
@@ -61,6 +92,10 @@ class SpritePainter {
     textPainter.paint(
       canvas,
       Offset(position.dx - textPainter.width / 2, position.dy - size / 2),
+    );
+    developer.log(
+      'Fallback draw (emoji) for ${type.name} stage $growthStage at $position',
+      name: 'SpritePainter',
     );
   }
 
