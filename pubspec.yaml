@@ -71,6 +71,19 @@ flutter:
   assets:
     - .env.local
     - assets/images/
+    - assets/images/crops/wheat_0.png
+    - assets/images/crops/wheat_1.png
+    - assets/images/crops/wheat_2.png
+    - assets/images/crops/wheat_3.png
+    - assets/images/crops/rice_0.png
+    - assets/images/crops/rice_1.png
+    - assets/images/crops/rice_2.png
+    - assets/images/crops/rice_3.png
+    - assets/images/crops/corn_0.png
+    - assets/images/crops/corn_1.png
+    - assets/images/crops/corn_2.png
+    - assets/images/crops/corn_3.png
+    
     - assets/tiles/
   #   - images/a_dot_ham.jpeg
 
