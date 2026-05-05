@@ -130,6 +130,28 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     _setupCamera();
   }
 
+  @override
+  void update(double dt) {
+    super.update(dt);
+    _updateCamera();
+  }
+
+  void _updateCamera() {
+    if (gameState.isCameraFollow) {
+      // Zoomed in, following player
+      camera.viewfinder.zoom = 3.0; 
+      camera.viewfinder.position = playerComponent.position;
+      _clampCamera();
+    } else {
+      // Full screen / static panned view
+      // Only set initial zoom if it hasn't been set or changed manually
+      // but for simplicity, we'll reset to cover scale if follow is turned off
+      if (camera.viewfinder.zoom == 2.0) {
+        _setupCamera(); 
+      }
+    }
+  }
+
   // ── Camera ──────────────────────────────────────────────────
 
   void _setupCamera() {
@@ -175,6 +197,7 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
 
   @override
   void onPanUpdate(DragUpdateInfo info) {
+    if (gameState.isCameraFollow) return; // Disable pan in follow mode
     final zoom = camera.viewfinder.zoom;
     camera.viewfinder.position -= info.delta.global / zoom;
     _clampCamera();
