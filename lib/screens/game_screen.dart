@@ -48,18 +48,19 @@ class _GameScreenState extends State<GameScreen> {
     // Navigate to Bank/Merchant when the player taps a building.
     _game.onBuildingTapped = (BuildingType type) {
       if (!mounted) return;
-      switch (type) {
-        case BuildingType.bank:
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const BankScreen()),
-          );
-        case BuildingType.merchant:
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const MerchantScreen()),
-          );
-      }
+      showGeneralDialog(
+        context: context,
+        barrierDismissible: true,
+        barrierLabel: '',
+        pageBuilder: (context, anim1, anim2) {
+          switch (type) {
+            case BuildingType.bank:
+              return const BankScreen();
+            case BuildingType.merchant:
+              return const MerchantScreen();
+          }
+        },
+      );
     };
 
     WidgetsBinding.instance.addPostFrameCallback((_) {

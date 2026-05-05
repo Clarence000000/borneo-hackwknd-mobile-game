@@ -25,9 +25,9 @@ class InteractionOverlay extends StatelessWidget {
         if (state.interactableBuilding != null) {
           final building = state.interactableBuilding!;
           if (building.buildingType == BuildingType.bank) {
-            options.add(_buildOption(1, 'Bank', () => game.onBuildingTapped?.call(building.buildingType)));
+            options.add(_buildOption('F', 'Bank', () => game.onBuildingTapped?.call(building.buildingType)));
           } else if (building.buildingType == BuildingType.merchant) {
-            options.add(_buildOption(1, 'Merchant', () => game.onBuildingTapped?.call(building.buildingType)));
+            options.add(_buildOption('F', 'Merchant', () => game.onBuildingTapped?.call(building.buildingType)));
           }
           worldPos = Vector2(building.position.x + building.size.x, building.position.y + building.size.y / 2);
         } else {
@@ -37,27 +37,27 @@ class InteractionOverlay extends StatelessWidget {
 
           if (state.interactionMenuState == InteractionMenuState.main) {
             if (!tile.hasCrop) {
-              options.add(_buildOption(1, 'Plant Crop', () => state.setInteractionMenuState(InteractionMenuState.plant)));
+              options.add(_buildOption('F', 'Plant Crop', () => state.setInteractionMenuState(InteractionMenuState.plant)));
             } else if (tile.isHarvestable) {
-              options.add(_buildOption(1, 'Harvest', () => state.setInteractionMenuState(InteractionMenuState.harvest)));
-              options.add(_buildOption(2, 'Remove Plant', () => state.setInteractionMenuState(InteractionMenuState.confirmRemove)));
+              options.add(_buildOption('1', 'Harvest', () => state.setInteractionMenuState(InteractionMenuState.harvest)));
+              options.add(_buildOption('2', 'Remove Plant', () => state.setInteractionMenuState(InteractionMenuState.confirmRemove)));
             } else {
-              options.add(_buildOption(1, 'Remove Plant', () => state.setInteractionMenuState(InteractionMenuState.confirmRemove)));
+              options.add(_buildOption('F', 'Remove Plant', () => state.setInteractionMenuState(InteractionMenuState.confirmRemove)));
             }
           } else if (state.interactionMenuState == InteractionMenuState.plant) {
-            options.add(_buildOption(1, 'Wheat', () => state.plantCropInteraction(CropType.wheat)));
-            options.add(_buildOption(2, 'Paddy', () => state.plantCropInteraction(CropType.rice)));
-            options.add(_buildOption(3, 'Corn', () => state.plantCropInteraction(CropType.corn)));
+            options.add(_buildOption('1', 'Wheat', () => state.plantCropInteraction(CropType.wheat)));
+            options.add(_buildOption('2', 'Paddy', () => state.plantCropInteraction(CropType.rice)));
+            options.add(_buildOption('3', 'Corn', () => state.plantCropInteraction(CropType.corn)));
           } else if (state.interactionMenuState == InteractionMenuState.harvest) {
-            options.add(_buildOption(1, 'Store in Inventory', () => state.harvestCropInteraction(sell: false)));
-            options.add(_buildOption(2, 'Sell Now', () => state.harvestCropInteraction(sell: true)));
+            options.add(_buildOption('1', 'Store in Inventory', () => state.harvestCropInteraction(sell: false)));
+            options.add(_buildOption('2', 'Sell Now', () => state.harvestCropInteraction(sell: true)));
           } else if (state.interactionMenuState == InteractionMenuState.confirmRemove) {
             options.add(const Padding(
               padding: EdgeInsets.only(bottom: 4.0),
               child: Text('Warning: No refund.', style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold)),
             ));
-            options.add(_buildOption(1, 'Yes, Remove', () => state.removeCrop()));
-            options.add(_buildOption(2, 'No, Cancel', () => state.setInteractionMenuState(InteractionMenuState.main)));
+            options.add(_buildOption('1', 'Yes, Remove', () => state.removeCrop()));
+            options.add(_buildOption('2', 'No, Cancel', () => state.setInteractionMenuState(InteractionMenuState.main)));
           }
         }
 
@@ -72,9 +72,9 @@ class InteractionOverlay extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.75),
+              color: Colors.brown.withValues(alpha: 0.70),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 0.5),
+              border: Border.all(color: Colors.brown.shade300.withValues(alpha: 0.5), width: 1.0),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -87,7 +87,8 @@ class InteractionOverlay extends StatelessWidget {
     );
   }
 
-  Widget _buildOption(int key, String label, VoidCallback onTap) {
+  Widget _buildOption(String keyLabel, String label, VoidCallback onTap) {
+    final displayKey = keyLabel == 'F' ? keyLabel : '$keyLabel.';
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -95,21 +96,12 @@ class InteractionOverlay extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 18,
-              height: 18,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.25),
-              ),
-              child: Text(
-                key.toString(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 10,
-                ),
+            Text(
+              displayKey,
+              style: const TextStyle(
+                color: Colors.amberAccent,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
               ),
             ),
             const SizedBox(width: 8),

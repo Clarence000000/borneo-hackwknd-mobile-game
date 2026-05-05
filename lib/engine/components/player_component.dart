@@ -267,9 +267,7 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
 
     final grid = game.gameState.grid;
     if (row >= 0 && row < grid.length && col >= 0 && col < grid[0].length) {
-      if (grid[row][col].isFarmland) {
-        return true;
-      }
+      // Farmland is now crossable, so we don't return true here.
     }
 
     try {
