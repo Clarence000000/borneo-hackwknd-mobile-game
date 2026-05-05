@@ -146,14 +146,31 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
   }
 
   void _clampCamera() {
-    final zoom = camera.viewfinder.zoom;
-    final halfViewW = (size.x / zoom) / 2;
-    final halfViewH = (size.y / zoom) / 2;
+      final zoom = camera.viewfinder.zoom;
+      final halfViewW = (size.x / zoom) / 2;
+      final halfViewH = (size.y / zoom) / 2;
 
-    final pos = camera.viewfinder.position;
-    pos.x = pos.x.clamp(halfViewW, _mapWidth - halfViewW);
-    pos.y = pos.y.clamp(halfViewH, _mapHeight - halfViewH);
-    camera.viewfinder.position = pos;
+      final minX = halfViewW;
+      final maxX = _mapWidth - halfViewW;
+      final minY = halfViewH;
+      final maxY = _mapHeight - halfViewH;
+
+      final pos = camera.viewfinder.position;
+
+      // Guard against floating point precision errors when viewport >= map size
+      if (minX >= maxX) {
+        pos.x = _mapWidth / 2; // Center horizontally
+      } else {
+        pos.x = pos.x.clamp(minX, maxX);
+      }
+
+      if (minY >= maxY) {
+        pos.y = _mapHeight / 2; // Center vertically
+      } else {
+        pos.y = pos.y.clamp(minY, maxY);
+      }
+
+      camera.viewfinder.position = pos;
   }
 
   @override
