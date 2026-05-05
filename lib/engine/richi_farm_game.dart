@@ -25,6 +25,7 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
 
   /// The loaded Tiled map component.
   late TiledComponent _mapComponent;
+  TiledComponent get mapComponent => _mapComponent;
 
   /// Map pixel dimensions (calculated from TMX metadata).
   late double _mapWidth;
@@ -81,7 +82,7 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
 
     // ── Player character ──────────────────────────────────────
     playerComponent = PlayerComponent();
-    playerComponent.position = Vector2(_mapWidth / 2, _mapHeight / 2);
+    playerComponent.position = Vector2((_mapWidth / 2) + 120, _mapHeight / 2);
     playerComponent.mapWidth = _mapWidth;
     playerComponent.mapHeight = _mapHeight;
     world.add(playerComponent);
@@ -290,5 +291,14 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     for (final pos in toRemove) {
       removeCropComponent(pos.$1, pos.$2);
     }
+  }
+
+  // ── Debug / Helper ──────────────────────────────────────────
+
+  /// Respawns the player to a safe space slightly right of the center of the map to prevent getting stuck.
+  void respawnPlayer() {
+    playerComponent.position = Vector2((_mapWidth / 2) + 120, _mapHeight / 2);
+    _setupCamera(); // Re-center the camera
+    developer.log('Respawned player near map center.', name: 'RichiFarmGame');
   }
 }

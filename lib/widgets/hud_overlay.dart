@@ -471,6 +471,23 @@ class _HudOverlayState extends State<HudOverlay> {
                           ),
                           const SizedBox(height: 6),
                           _HudActionButton(
+                            icon: Icons.person_pin_circle,
+                            tooltip: 'Unstuck (Respawn)',
+                            color: Colors.blueAccent,
+                            onPressed: () {
+                              state.game?.respawnPlayer();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    duration: Duration(seconds: 1),
+                                    content: Text('Respawned at map center.'),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 6),
+                          _HudActionButton(
                             icon: Icons.leaderboard,
                             tooltip: 'Leaderboard',
                             color: Colors.amber,

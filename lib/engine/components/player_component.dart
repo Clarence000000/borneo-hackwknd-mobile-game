@@ -148,7 +148,27 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
         direction.normalize();
       }
 
-      position.add(direction * speed * dt);
+      // Check collision at feet (center-bottom)
+      final feetOffset = Vector2(0, 16);
+      
+      final moveX = direction.x * speed * dt;
+      final moveY = direction.y * speed * dt;
+      
+      if (moveX != 0) {
+        final currentFeet = position + feetOffset;
+        final newFeetX = currentFeet..x += moveX;
+        if (!_isCollision(newFeetX)) {
+          position.x += moveX;
+        }
+      }
+      
+      if (moveY != 0) {
+        final currentFeet = position + feetOffset;
+        final newFeetY = currentFeet..y += moveY;
+        if (!_isCollision(newFeetY)) {
+          position.y += moveY;
+        }
+      }
 
       // Pick animation based on dominant axis
       if (dx.abs() > dy.abs()) {
@@ -158,7 +178,7 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
       }
     }
 
-    // Clamp to map bounds
+    // Clamp to map bounds (fallback)
     if (mapWidth > 0 && mapHeight > 0) {
       position.x = position.x.clamp(0, mapWidth);
       position.y = position.y.clamp(0, mapHeight);
@@ -227,5 +247,48 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
     }
     
     game.gameState.updateInteractableTile(closestTile);
+  }
+
+  bool _isCollision(Vector2 testPos) {
+    if (mapWidth > 0 && mapHeight > 0) {
+      if (testPos.x < 0 || testPos.x > mapWidth || testPos.y < 0 || testPos.y > mapHeight) {
+        return true;
+      }
+    }
+
+    for (final building in game.buildings) {
+      if (building.containsWorldPoint(testPos.x, testPos.y)) {
+        return true;
+      }
+    }
+
+    final col = (testPos.x / 16).floor();
+    final row = (testPos.y / 16).floor();
+
+    final grid = game.gameState.grid;
+    if (row >= 0 && row < grid.length && col >= 0 && col < grid[0].length) {
+      if (grid[row][col].isFarmland) {
+        return true;
+      }
+    }
+
+    try {
+      final map = game.mapComponent.tileMap.map;
+      for (final layer in map.layers) {
+        if (layer.name == 'Water' || layer.name == 'Hills') {
+          final layerDyn = layer as dynamic;
+          final data = layerDyn.data;
+          if (data != null) {
+            final idx = row * map.width + col;
+            if (idx >= 0 && idx < data.length) {
+              final gid = data[idx] as int? ?? 0;
+              if (gid != 0) return true;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    return false;
   }
 }
