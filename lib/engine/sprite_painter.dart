@@ -1,4 +1,4 @@
-import 'dart:math';
+// dart:math removed — no longer needed after weather effect cleanup
 
 import 'package:flutter/material.dart';
 
@@ -163,33 +163,5 @@ class SpritePainter {
     canvas.drawRect(Rect.fromLTWH(pos.dx - 8, pos.dy - 2, 16, 8), leafPaint);
     canvas.drawRect(Rect.fromLTWH(pos.dx - 6, pos.dy - 8, 12, 8), leafPaint);
     canvas.drawRect(Rect.fromLTWH(pos.dx - 4, pos.dy - 12, 8, 6), darkLeaf);
-  }
-
-  // ─── Weather Effects ───────────────────────────────────────
-
-  /// Draw rain particles across the canvas.
-  static void drawRain(Canvas canvas, Size size, double animationPhase) {
-    final paint = Paint()
-      ..color = GameColors.rainDrop
-      ..strokeWidth = 1.5;
-
-    final rng = Random(42); // Deterministic seed for consistent pattern
-    for (var i = 0; i < 120; i++) {
-      final x = rng.nextDouble() * size.width;
-      final baseY = rng.nextDouble() * size.height;
-      final y = (baseY + animationPhase * size.height) % size.height;
-
-      canvas.drawLine(Offset(x, y), Offset(x - 2, y + 8), paint);
-    }
-  }
-
-  /// Draw a flood water overlay at the bottom portion.
-  static void drawFloodOverlay(Canvas canvas, Size size, double severity) {
-    final paint = Paint()..color = GameColors.floodWater;
-    final height = size.height * 0.3 * severity;
-    canvas.drawRect(
-      Rect.fromLTWH(0, size.height - height, size.width, height),
-      paint,
-    );
   }
 }

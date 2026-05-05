@@ -9,9 +9,11 @@ import 'package:flutter/painting.dart';
 import 'package:farm_fintech/config/constants.dart';
 import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/engine/components/crop_component.dart';
+import 'package:farm_fintech/engine/components/weather_effect_component.dart';
 import 'package:farm_fintech/engine/components/player_component.dart';
 import 'package:farm_fintech/engine/crop_image_registry.dart';
 import 'package:farm_fintech/providers/game_state.dart';
+import 'package:farm_fintech/models/weather_event.dart';
 
 /// Main Flame game class — renders the Tiled map with crops and player.
 ///
@@ -36,6 +38,9 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
 
   /// Joystick (mobile only).
   JoystickComponent? joystick;
+
+  /// Weather visual effects overlay.
+  late WeatherEffectComponent _weatherEffect;
 
   RichiFarmGame({required this.gameState});
 
@@ -92,8 +97,23 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     );
     camera.viewport.add(joystick!);
 
+    // Weather effect overlay (renders behind joystick).
+    _weatherEffect = WeatherEffectComponent();
+    camera.viewport.add(_weatherEffect);
+
     // Set up camera.
     _setupCamera();
+
+    // Sync weather visuals if a disaster was already active.
+    _weatherEffect.setWeather(gameState.activeDisaster);
+  }
+
+  // ── Weather visuals ────────────────────────────────────────
+
+  /// Update the weather visual overlay. Called by [GameState] when
+  /// a disaster is triggered or cleared.
+  void updateWeatherVisuals(DisasterType type) {
+    _weatherEffect.setWeather(type);
   }
 
   // ── Camera ──────────────────────────────────────────────────
@@ -116,9 +136,16 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     final halfViewW = (size.x / zoom) / 2;
     final halfViewH = (size.y / zoom) / 2;
 
+    // When the viewport exactly matches the map (cover zoom), floating-point
+    // imprecision can make minBound > maxBound. Guard against that.
+    final minX = halfViewW;
+    final maxX = _mapWidth - halfViewW;
+    final minY = halfViewH;
+    final maxY = _mapHeight - halfViewH;
+
     final pos = camera.viewfinder.position;
-    pos.x = pos.x.clamp(halfViewW, _mapWidth - halfViewW);
-    pos.y = pos.y.clamp(halfViewH, _mapHeight - halfViewH);
+    pos.x = minX >= maxX ? _mapWidth / 2 : pos.x.clamp(minX, maxX);
+    pos.y = minY >= maxY ? _mapHeight / 2 : pos.y.clamp(minY, maxY);
     camera.viewfinder.position = pos;
   }
 

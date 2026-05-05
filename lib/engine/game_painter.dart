@@ -7,7 +7,6 @@ import 'package:farm_fintech/engine/camera.dart';
 import 'package:farm_fintech/engine/isometric_engine.dart';
 import 'package:farm_fintech/engine/sprite_painter.dart';
 import 'package:farm_fintech/models/tile.dart';
-import 'package:farm_fintech/models/weather_event.dart';
 
 /// Main [CustomPainter] that renders the entire isometric farm scene.
 ///
@@ -20,7 +19,6 @@ class GamePainter extends CustomPainter {
   final GameCamera camera;
   final IsometricEngine engine;
   final (int, int)? selectedTile;
-  final DisasterType? activeDisaster;
   final double animationPhase;
 
   GamePainter({
@@ -28,7 +26,6 @@ class GamePainter extends CustomPainter {
     required this.camera,
     required this.engine,
     this.selectedTile,
-    this.activeDisaster,
     this.animationPhase = 0,
   });
 
@@ -52,10 +49,7 @@ class GamePainter extends CustomPainter {
 
     canvas.restore();
 
-    // ── Weather overlay (screen-space, on top of everything) ─
-    if (activeDisaster != null && activeDisaster != DisasterType.none) {
-      _drawWeatherOverlay(canvas, size);
-    }
+
   }
 
   void _drawTile(Canvas canvas, Tile tile, int col, int row) {
@@ -175,36 +169,7 @@ class GamePainter extends CustomPainter {
     );
   }
 
-  void _drawWeatherOverlay(Canvas canvas, Size size) {
-    switch (activeDisaster!) {
-      case DisasterType.flood:
-        _drawScreenTint(
-          canvas,
-          size,
-          GameColors.rainDrop.withValues(alpha: 0.16),
-        );
-        SpritePainter.drawRain(canvas, size, animationPhase);
-        SpritePainter.drawFloodOverlay(canvas, size, 0.6);
-      case DisasterType.storm:
-        _drawScreenTint(
-          canvas,
-          size,
-          GameColors.rainDrop.withValues(alpha: 0.2),
-        );
-        SpritePainter.drawRain(canvas, size, animationPhase);
-      case DisasterType.drought:
-        _drawScreenTint(canvas, size, const Color(0x55F0B13E));
-      case DisasterType.none:
-        break;
-    }
-  }
 
-  void _drawScreenTint(Canvas canvas, Size size, Color color) {
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      Paint()..color = color,
-    );
-  }
 
   void _drawHarvestBubble(Canvas canvas, Offset center) {
     final bob = math.sin(animationPhase * 4) * 2.5;
@@ -236,7 +201,6 @@ class GamePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant GamePainter oldDelegate) {
     return oldDelegate.selectedTile != selectedTile ||
-        oldDelegate.activeDisaster != activeDisaster ||
         oldDelegate.animationPhase != animationPhase ||
         true; // For now, always repaint. Optimize later with dirty flags.
   }

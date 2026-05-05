@@ -981,6 +981,7 @@ class GameState extends ChangeNotifier {
 
     // Sync crop sprites (destroyed crops get removed)
     game?.syncCropsFromGameState();
+    game?.updateWeatherVisuals(type);
     notifyListeners();
     _saveGridState(); // Persist disaster damage
     return destroyed;
@@ -989,6 +990,7 @@ class GameState extends ChangeNotifier {
   /// Clear the active disaster.
   void clearDisaster() {
     activeDisaster = DisasterType.none;
+    game?.updateWeatherVisuals(DisasterType.none);
     notifyListeners();
   }
 
