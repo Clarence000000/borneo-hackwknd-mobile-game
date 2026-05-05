@@ -28,6 +28,9 @@ class GameState extends ChangeNotifier {
   // ── Flame game reference (for crop sprite sync) ─────────────
   RichiFarmGame? game;
 
+  // ── Loading State ───────────────────────────────────────────
+  bool isLoading = true;
+
   // ── Player ──────────────────────────────────────────────────
   Player? player;
 
@@ -188,7 +191,8 @@ class GameState extends ChangeNotifier {
 
   GameState() {
     _initGrid();
-    _startDayCycleClock();
+    // Do NOT start the clock here. It must wait until setPlayer finishes
+    // loading the currentDay from Firestore to avoid race conditions.
   }
 
   int get remainingCycleSeconds => _remainingCycleSeconds;
@@ -436,13 +440,15 @@ class GameState extends ChangeNotifier {
 
   /// Set player and load their specific grid if it exists
   Future<void> setPlayer(Player newPlayer) async {
+    isLoading = true;
     player = newPlayer;
     // Sync state variables from persisted player object
     currentDay = newPlayer.currentDay;
     _manualNextDayUsedToday = newPlayer.manualNextDayUsedToday;
     _manualNextDayUsageDate = newPlayer.manualNextDayUsageDate;
 
-    notifyListeners(); // Notify early so UI knows player/day is there
+    // Do not notifyListeners early if we are showing a loading screen.
+    // Wait for grid to be fully fetched.
 
     final savedGrid = await _firestore.getGrid(newPlayer.uid);
     if (savedGrid != null) {
@@ -476,6 +482,11 @@ class GameState extends ChangeNotifier {
       // Optionally process transactions for credit scoring or UI
       notifyListeners();
     });
+
+    // Start the day cycle clock ONLY AFTER the day has been synced from Firestore
+    _startDayCycleClock();
+
+    isLoading = false;
     notifyListeners();
   }
 

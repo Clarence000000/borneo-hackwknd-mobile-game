@@ -11,6 +11,7 @@ import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/engine/components/building_component.dart';
 import 'package:farm_fintech/engine/components/crop_component.dart';
 import 'package:farm_fintech/engine/components/weather_effect_component.dart';
+import 'package:farm_fintech/engine/components/night_overlay_component.dart';
 import 'package:farm_fintech/engine/components/player_component.dart';
 import 'package:farm_fintech/engine/components/interaction_keyboard_handler.dart';
 import 'package:farm_fintech/engine/crop_image_registry.dart';
@@ -116,6 +117,10 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     // Weather effect overlay (renders behind joystick).
     _weatherEffect = WeatherEffectComponent();
     camera.viewport.add(_weatherEffect);
+
+    // Night overlay effect
+    final nightOverlay = NightOverlayComponent();
+    camera.viewport.add(nightOverlay);
 
     // ── Buildings ──────────────────────────────────────────
     // Bank: ~3×4 tiles, placed near top-left
