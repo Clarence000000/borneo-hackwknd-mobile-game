@@ -447,8 +447,21 @@ class GameState extends ChangeNotifier {
     final savedGrid = await _firestore.getGrid(newPlayer.uid);
     if (savedGrid != null) {
       grid = savedGrid;
+      // Re-apply farmland tiles if the Tiled map is already loaded.
+      // Resolves race condition where markFarmableFromTiled is overwritten.
+      if (game?.isLoaded ?? false) {
+        try {
+          markFarmableFromTiled(game!.mapComponent.tileMap.map);
+        } catch (_) {}
+      }
+      game?.syncCropsFromGameState();
     } else {
       _initGrid(); // Fallback to default
+      if (game?.isLoaded ?? false) {
+        try {
+          markFarmableFromTiled(game!.mapComponent.tileMap.map);
+        } catch (_) {}
+      }
       await _saveGridState(); // Save the default grid
     }
     // Subscribe to realtime BNPL plan updates and recent transactions
@@ -572,6 +585,7 @@ class GameState extends ChangeNotifier {
 
     try {
       await _savePlayerState();
+      await _saveGridState();
       // Add crop sprite on the map
       game?.addCropComponent(col, row, cropType, 0);
       notifyListeners();
@@ -755,6 +769,7 @@ class GameState extends ChangeNotifier {
 
     try {
       await _savePlayerState();
+      await _saveGridState();
       game?.syncCropsFromGameState();
       notifyListeners();
       return boostedCount;
