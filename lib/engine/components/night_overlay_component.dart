@@ -3,8 +3,12 @@ import 'package:flame/components.dart';
 import 'package:farm_fintech/engine/richi_farm_game.dart';
 
 /// A screen-space overlay that darkens the game during the night phase.
+///
+/// On the first frame after loading, the overlay snaps to the correct
+/// brightness so a reload during nighttime doesn't flash bright then fade.
 class NightOverlayComponent extends PositionComponent with HasGameReference<RichiFarmGame> {
   double _currentAlpha = 0.0;
+  bool _initialised = false;
   
   // 0x99 alpha is roughly 0.6.
   final double _targetAlpha = 0.6; 
@@ -28,6 +32,14 @@ class NightOverlayComponent extends PositionComponent with HasGameReference<Rich
     // Get the night status from game state (night is when isDaytime is false)
     final isNight = !game.gameState.isDaytime;
     final target = isNight ? _targetAlpha : 0.0;
+
+    // On the very first frame, snap immediately to the correct alpha
+    // so a reload during night doesn't flash bright then slowly darken.
+    if (!_initialised) {
+      _currentAlpha = target;
+      _initialised = true;
+      return;
+    }
 
     // Smooth transition logic (gradient fade)
     if (_currentAlpha != target) {

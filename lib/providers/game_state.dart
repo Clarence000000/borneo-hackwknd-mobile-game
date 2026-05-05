@@ -64,6 +64,7 @@ class GameState extends ChangeNotifier {
   Timer? _dayCycleTimer;
   Timer? _loanSharkThreatTimer;
   bool _isAdvancingDay = false;
+  int _timeSaveCountdown = 0; // Counts down; save when reaching 0
   int _loanSharkThreatSecondsRemaining = 0;
   final Map<String, double> _monthlyExpenses = {
     'seed': 0,
@@ -239,14 +240,26 @@ class GameState extends ChangeNotifier {
     );
   }
 
-  void _startDayCycleClock() {
+  void _startDayCycleClock({int? initialSeconds}) {
     _dayCycleTimer?.cancel();
+    if (initialSeconds != null) {
+      _remainingCycleSeconds = initialSeconds;
+    }
+    _timeSaveCountdown = 15; // First save after 15 seconds
     _dayCycleTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       if (_isAdvancingDay) return;
       _remainingCycleSeconds--;
       if (_remainingCycleSeconds <= 0) {
         await _advanceDayCore(isManual: false);
         _remainingCycleSeconds = kGameDayDurationMinutes * 60;
+        _timeSaveCountdown = 15; // Reset after day advance (which already saves)
+      } else {
+        // Throttled time persistence: save every 15 seconds
+        _timeSaveCountdown--;
+        if (_timeSaveCountdown <= 0) {
+          _timeSaveCountdown = 15;
+          _savePlayerState(); // Fire-and-forget; no need to await
+        }
       }
       notifyListeners();
     });
@@ -444,6 +457,7 @@ class GameState extends ChangeNotifier {
     player = newPlayer;
     // Sync state variables from persisted player object
     currentDay = newPlayer.currentDay;
+    _remainingCycleSeconds = newPlayer.remainingCycleSeconds;
     _manualNextDayUsedToday = newPlayer.manualNextDayUsedToday;
     _manualNextDayUsageDate = newPlayer.manualNextDayUsageDate;
 
@@ -483,8 +497,8 @@ class GameState extends ChangeNotifier {
       notifyListeners();
     });
 
-    // Start the day cycle clock ONLY AFTER the day has been synced from Firestore
-    _startDayCycleClock();
+    // Start the day cycle clock from the restored time position
+    _startDayCycleClock(initialSeconds: _remainingCycleSeconds);
 
     isLoading = false;
     notifyListeners();
@@ -562,6 +576,9 @@ class GameState extends ChangeNotifier {
 
   Future<void> _savePlayerState() async {
     if (player == null) return;
+    // Sync the current intra-day time back to the player model before saving
+    player!.remainingCycleSeconds = _remainingCycleSeconds;
+    player!.currentDay = currentDay;
     await _firestore.savePlayer(player!);
   }
 
