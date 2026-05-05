@@ -8,9 +8,11 @@ import 'package:flutter/painting.dart';
 
 import 'package:farm_fintech/config/constants.dart';
 import 'package:farm_fintech/config/theme.dart';
+import 'package:farm_fintech/engine/components/building_component.dart';
 import 'package:farm_fintech/engine/components/crop_component.dart';
 import 'package:farm_fintech/engine/components/weather_effect_component.dart';
 import 'package:farm_fintech/engine/components/player_component.dart';
+import 'package:farm_fintech/engine/components/interaction_keyboard_handler.dart';
 import 'package:farm_fintech/engine/crop_image_registry.dart';
 import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/models/weather_event.dart';
@@ -25,6 +27,7 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
 
   /// The loaded Tiled map component.
   late TiledComponent _mapComponent;
+  TiledComponent get mapComponent => _mapComponent;
 
   /// Map pixel dimensions (calculated from TMX metadata).
   late double _mapWidth;
@@ -36,11 +39,20 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
   /// Player character.
   late PlayerComponent playerComponent;
 
-  /// Joystick (mobile only).
+  /// Joystick.
   JoystickComponent? joystick;
+
 
   /// Weather visual effects overlay.
   late WeatherEffectComponent _weatherEffect;
+
+  /// Buildings on the map.
+  final List<BuildingComponent> _buildings = [];
+  List<BuildingComponent> get buildings => _buildings;
+
+  /// Callback when a building is tapped — set by GameScreen for navigation.
+  void Function(BuildingType type)? onBuildingTapped;
+
 
   RichiFarmGame({required this.gameState});
 
@@ -77,10 +89,13 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
 
     // ── Player character ──────────────────────────────────────
     playerComponent = PlayerComponent();
-    playerComponent.position = Vector2(_mapWidth / 2, _mapHeight / 2);
+    playerComponent.position = Vector2((_mapWidth / 2) + 120, _mapHeight / 2);
     playerComponent.mapWidth = _mapWidth;
     playerComponent.mapHeight = _mapHeight;
     world.add(playerComponent);
+
+    // Keyboard handler for crop interactions
+    add(InteractionKeyboardHandler());
 
     // Joystick (always shown — on mobile it's the primary control,
     // on desktop/web it's supplementary to WASD/arrow keys).
@@ -97,9 +112,31 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     );
     camera.viewport.add(joystick!);
 
+
     // Weather effect overlay (renders behind joystick).
     _weatherEffect = WeatherEffectComponent();
     camera.viewport.add(_weatherEffect);
+
+    // ── Buildings ──────────────────────────────────────────
+    // Bank: ~3×4 tiles, placed near top-left
+    final bank = BuildingComponent(
+      buildingType: BuildingType.bank,
+      gridCol: 2,
+      gridRow: 2,
+      buildingSize: Vector2(48, 64), // 3×4 tiles
+    );
+    _buildings.add(bank);
+    world.add(bank);
+
+    // Merchant: ~3×3 tiles, placed a bit further
+    final merchant = BuildingComponent(
+      buildingType: BuildingType.merchant,
+      gridCol: 8,
+      gridRow: 2,
+      buildingSize: Vector2(48, 48), // 3×3 tiles
+    );
+    _buildings.add(merchant);
+    world.add(merchant);
 
     // Set up camera.
     _setupCamera();
@@ -136,16 +173,26 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     final halfViewW = (size.x / zoom) / 2;
     final halfViewH = (size.y / zoom) / 2;
 
-    // When the viewport exactly matches the map (cover zoom), floating-point
-    // imprecision can make minBound > maxBound. Guard against that.
     final minX = halfViewW;
     final maxX = _mapWidth - halfViewW;
     final minY = halfViewH;
     final maxY = _mapHeight - halfViewH;
 
     final pos = camera.viewfinder.position;
-    pos.x = minX >= maxX ? _mapWidth / 2 : pos.x.clamp(minX, maxX);
-    pos.y = minY >= maxY ? _mapHeight / 2 : pos.y.clamp(minY, maxY);
+
+    // Guard against floating point precision errors when viewport >= map size
+    if (minX >= maxX) {
+      pos.x = _mapWidth / 2; // Center horizontally
+    } else {
+      pos.x = pos.x.clamp(minX, maxX);
+    }
+
+    if (minY >= maxY) {
+      pos.y = _mapHeight / 2; // Center vertically
+    } else {
+      pos.y = pos.y.clamp(minY, maxY);
+    }
+
     camera.viewfinder.position = pos;
   }
 
@@ -181,6 +228,18 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
 
     final worldX = camX + (screenPos.dx - screenCenterX) / zoom;
     final worldY = camY + (screenPos.dy - screenCenterY) / zoom;
+
+    // Check if tap hit a building first.
+    for (final building in _buildings) {
+      if (building.containsWorldPoint(worldX, worldY)) {
+        developer.log(
+          'Tap → building ${building.buildingType.name}',
+          name: 'RichiFarmGame',
+        );
+        onBuildingTapped?.call(building.buildingType);
+        return; // Don't select a tile if we tapped a building.
+      }
+    }
 
     final map = _mapComponent.tileMap.map;
     final mapCol = (worldX / 16).floor().clamp(0, map.width - 1);
@@ -272,5 +331,14 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     for (final pos in toRemove) {
       removeCropComponent(pos.$1, pos.$2);
     }
+  }
+
+  // ── Debug / Helper ──────────────────────────────────────────
+
+  /// Respawns the player to a safe space slightly right of the center of the map to prevent getting stuck.
+  void respawnPlayer() {
+    playerComponent.position = Vector2((_mapWidth / 2) + 120, _mapHeight / 2);
+    _setupCamera(); // Re-center the camera
+    developer.log('Respawned player near map center.', name: 'RichiFarmGame');
   }
 }

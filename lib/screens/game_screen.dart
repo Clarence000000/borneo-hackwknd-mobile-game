@@ -7,14 +7,18 @@ import 'package:provider/provider.dart';
 
 import 'package:farm_fintech/config/constants.dart';
 import 'package:farm_fintech/config/theme.dart';
+import 'package:farm_fintech/engine/components/building_component.dart';
 import 'package:farm_fintech/engine/richi_farm_game.dart';
 import 'package:farm_fintech/models/tile.dart';
 import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/services/firestore_service.dart';
 import 'package:farm_fintech/widgets/dialog_popup.dart';
 import 'package:farm_fintech/widgets/hud_overlay.dart';
+import 'package:farm_fintech/widgets/interaction_overlay.dart';
 import 'package:farm_fintech/utils/currency_util.dart';
 import 'package:farm_fintech/services/seed_service.dart';
+import 'package:farm_fintech/screens/bank_screen.dart';
+import 'package:farm_fintech/screens/merchant_screen.dart';
 
 /// Main game screen — landscape farm view powered by Flame engine.
 ///
@@ -40,6 +44,24 @@ class _GameScreenState extends State<GameScreen> {
     final state = context.read<GameState>();
     _game = RichiFarmGame(gameState: state);
     state.game = _game; // Wire up so GameState can sync crop sprites
+
+    // Navigate to Bank/Merchant when the player taps a building.
+    _game.onBuildingTapped = (BuildingType type) {
+      if (!mounted) return;
+      showGeneralDialog(
+        context: context,
+        barrierDismissible: true,
+        barrierLabel: '',
+        pageBuilder: (context, anim1, anim2) {
+          switch (type) {
+            case BuildingType.bank:
+              return const BankScreen();
+            case BuildingType.merchant:
+              return const MerchantScreen();
+          }
+        },
+      );
+    };
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!(state.player?.tutorialCompleted ?? true)) {
@@ -117,6 +139,9 @@ class _GameScreenState extends State<GameScreen> {
 
               // ── Layer 3: Tile Action Bar (bottom sheet) ─────
               if (state.selectedTile != null) _buildTileActionBar(state),
+
+              // ── Layer 4: Interaction Overlay ────────────────
+              InteractionOverlay(game: _game),
             ],
           );
         },
