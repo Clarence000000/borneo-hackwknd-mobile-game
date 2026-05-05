@@ -13,7 +13,8 @@ class InteractionKeyboardHandler extends Component
 
     final gameState = game.gameState;
 
-    if (keysPressed.contains(LogicalKeyboardKey.digit1)) {
+    if (keysPressed.contains(LogicalKeyboardKey.digit1) || 
+        keysPressed.contains(LogicalKeyboardKey.keyF)) {
       gameState.handleInteractionKey(1);
     } else if (keysPressed.contains(LogicalKeyboardKey.digit2)) {
       gameState.handleInteractionKey(2);
