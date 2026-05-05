@@ -65,6 +65,7 @@ class GameState extends ChangeNotifier {
   Timer? _loanSharkThreatTimer;
   bool _isAdvancingDay = false;
   int _timeSaveCountdown = 0; // Counts down; save when reaching 0
+  AppLifecycleListener? _lifecycleListener;
   int _loanSharkThreatSecondsRemaining = 0;
   final Map<String, double> _monthlyExpenses = {
     'seed': 0,
@@ -328,10 +329,13 @@ class GameState extends ChangeNotifier {
 
   @override
   void dispose() {
+    // Persist time progress one last time before shutdown
+    _savePlayerState();
     _dayCycleTimer?.cancel();
     _loanSharkThreatTimer?.cancel();
     _bnplPlansSub?.cancel();
     _txSub?.cancel();
+    _lifecycleListener?.dispose();
     super.dispose();
   }
 
@@ -499,6 +503,19 @@ class GameState extends ChangeNotifier {
 
     // Start the day cycle clock from the restored time position
     _startDayCycleClock(initialSeconds: _remainingCycleSeconds);
+
+    // Listen for app lifecycle changes (browser tab close, mobile background)
+    // to persist time progress immediately.
+    _lifecycleListener?.dispose();
+    _lifecycleListener = AppLifecycleListener(
+      onInactive: () => _savePlayerState(),
+      onPause: () => _savePlayerState(),
+      onDetach: () => _savePlayerState(),
+      onHide: () => _savePlayerState(),
+    );
+
+    // Save immediately to lock in the restored time (important for web refresh)
+    await _savePlayerState();
 
     isLoading = false;
     notifyListeners();
