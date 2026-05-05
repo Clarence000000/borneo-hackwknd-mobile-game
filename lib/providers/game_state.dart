@@ -220,6 +220,13 @@ class GameState extends ChangeNotifier {
   bool get autoHarvestEnabled => player?.autoHarvestEnabled ?? false;
   int get fertilizerPackCount => player?.fertilizerPackCount ?? 0;
 
+  bool _isCameraFollow = false;
+  bool get isCameraFollow => _isCameraFollow;
+  void toggleCameraFollow() {
+    _isCameraFollow = !_isCameraFollow;
+    notifyListeners();
+  }
+
   int get freeNextDayRemaining {
     _resetManualNextDayIfNewDate();
     return (kFreeManualNextDayPerRealDay - _manualNextDayUsedToday).clamp(

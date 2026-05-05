@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flame/components.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'package:farm_fintech/config/constants.dart';
 import 'package:farm_fintech/engine/components/building_component.dart';
@@ -13,6 +14,10 @@ class InteractionOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const textColor = Color(0xFF2D1B10);
+    const parchmentColor = Color(0xFFF4E4BC);
+    const leatherBorder = Color(0xFF5D4037);
+
     return Consumer<GameState>(
       builder: (context, state, child) {
         if (state.interactableBuilding == null && state.interactableTile == null) {
@@ -49,37 +54,77 @@ class InteractionOverlay extends StatelessWidget {
             options.add(_buildOption('2', 'Paddy', () => state.plantCropInteraction(CropType.rice)));
             options.add(_buildOption('3', 'Corn', () => state.plantCropInteraction(CropType.corn)));
           } else if (state.interactionMenuState == InteractionMenuState.harvest) {
-            options.add(_buildOption('1', 'Store in Inventory', () => state.harvestCropInteraction(sell: false)));
-            options.add(_buildOption('2', 'Sell Now', () => state.harvestCropInteraction(sell: true)));
+            options.add(_buildOption('1', 'Store', () => state.harvestCropInteraction(sell: false)));
+            options.add(_buildOption('2', 'Sell', () => state.harvestCropInteraction(sell: true)));
           } else if (state.interactionMenuState == InteractionMenuState.confirmRemove) {
-            options.add(const Padding(
-              padding: EdgeInsets.only(bottom: 4.0),
-              child: Text('Warning: No refund.', style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+            options.add(Padding(
+              padding: const EdgeInsets.only(bottom: 6.0),
+              child: Text('Warning: No refund.', style: GoogleFonts.almendra(color: Colors.red.shade900, fontSize: 12, fontWeight: FontWeight.bold)),
             ));
             options.add(_buildOption('1', 'Yes, Remove', () => state.removeCrop()));
             options.add(_buildOption('2', 'No, Cancel', () => state.setInteractionMenuState(InteractionMenuState.main)));
           }
         }
 
-        // Calculate screen position from world coordinates
         final screenPos = game.camera.viewfinder.localToGlobal(worldPos);
+        final playerScreenPos = game.camera.viewfinder.localToGlobal(game.playerComponent.position);
+        
+        // Decide whether to show box on the left or right of the tile
+        // to avoid the player character.
+        bool showOnRight = screenPos.x > playerScreenPos.x;
+        // If tile is to the right of player, show box to the right.
+        // If tile is to the left of player, show box to the left.
+        // If they are on same tile, default to right but offset more.
+        
+        final size = MediaQuery.of(context).size;
+        double leftPos;
+        if (showOnRight) {
+          leftPos = (screenPos.x + 20).clamp(0.0, size.width - 150);
+        } else {
+          leftPos = (screenPos.x - 160).clamp(10.0, size.width);
+        }
+        
+        final topPos = (screenPos.y - (options.length * 20)).clamp(80.0, size.height - 200);
 
-
-
-        return Positioned(
-          left: screenPos.x + 8, // Just to the right of the tile
-          top: screenPos.y - (options.length * 14), // Centered vertically relative to the tile
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.brown.withValues(alpha: 0.70),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.brown.shade300.withValues(alpha: 0.5), width: 1.0),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: options,
+        return AnimatedPositioned(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          left: leftPos,
+          top: topPos,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: const Duration(milliseconds: 200),
+            builder: (context, value, child) {
+              return Transform.scale(
+                scale: 0.8 + (0.2 * value),
+                child: Opacity(opacity: value, child: child),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: parchmentColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: leatherBorder, width: 3),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 8, offset: const Offset(4, 4)),
+                ],
+              ),
+              child: Stack(
+                children: [
+                  const Positioned(top: 0, left: 0, child: Icon(Icons.auto_awesome, size: 8, color: leatherBorder)),
+                  const Positioned(bottom: 0, right: 0, child: Icon(Icons.auto_awesome, size: 8, color: leatherBorder)),
+                  
+                  Padding(
+                    padding: const EdgeInsets.all(4.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: options,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -89,28 +134,38 @@ class InteractionOverlay extends StatelessWidget {
 
   Widget _buildOption(String keyLabel, String label, VoidCallback onTap) {
     final displayKey = keyLabel == 'F' ? keyLabel : '$keyLabel.';
+    const highlightColor = Color(0xFFC5A021); // The new darker gold
+    const textColor = Color(0xFF2D1B10);
+
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4.0),
+        padding: const EdgeInsets.symmetric(vertical: 6.0),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              displayKey,
-              style: const TextStyle(
-                color: Colors.amberAccent,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF5D4037).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                displayKey,
+                style: GoogleFonts.cinzel(
+                  color: highlightColor,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 14,
+                ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Text(
               label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+              style: GoogleFonts.almendra(
+                color: textColor,
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ],

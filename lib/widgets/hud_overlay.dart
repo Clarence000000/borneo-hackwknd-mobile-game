@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'package:farm_fintech/config/constants.dart';
 import 'package:farm_fintech/config/theme.dart';
@@ -35,16 +36,6 @@ const _currencyToUsdRate = {
 
 const _aseanCountries = ['MY', 'ID', 'SG', 'TH', 'PH', 'VN'];
 
-/// In-game HUD — landscape optimized.
-///
-/// Layout:
-/// ┌─────────────────────────────────────────────────────┐
-/// │ [Profile] [Cash] [Bank] [Score]     [Day] [Weather] │
-/// │                                                     │
-/// │                                        [NextDay]    │
-/// │                                        [Bank]       │
-/// │                                        [Shop]       │
-/// └─────────────────────────────────────────────────────┘
 class HudOverlay extends StatefulWidget {
   const HudOverlay({super.key});
 
@@ -54,9 +45,104 @@ class HudOverlay extends StatefulWidget {
 
 class _HudOverlayState extends State<HudOverlay> {
   String? _displayCountry;
+  bool _isToolsExpanded = false;
+  bool _isTopUiHidden = false;
+
+  void _showMessage(String title, String message, {String? highlight}) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '',
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, anim1, anim2) {
+        return Align(
+          alignment: Alignment.bottomCenter,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 100, left: 40, right: 40),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF4E4BC),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFF5D4037), width: 4),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 20, offset: const Offset(0, 10)),
+              ],
+            ),
+            child: Stack(
+              children: [
+                const Positioned(top: 4, left: 4, child: Icon(Icons.auto_awesome, size: 12, color: Color(0xFF5D4037))),
+                const Positioned(top: 4, right: 4, child: Icon(Icons.auto_awesome, size: 12, color: Color(0xFF5D4037))),
+                const Positioned(bottom: 4, left: 4, child: Icon(Icons.auto_awesome, size: 12, color: Color(0xFF5D4037))),
+                const Positioned(bottom: 4, right: 4, child: Icon(Icons.auto_awesome, size: 12, color: Color(0xFF5D4037))),
+                
+                Material(
+                  color: Colors.transparent,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: GoogleFonts.cinzel(fontSize: 22, fontWeight: FontWeight.w900, color: const Color(0xFF5D4037)),
+                        ),
+                        const Divider(color: Color(0xFF5D4037), thickness: 2),
+                        const SizedBox(height: 8),
+                        RichText(
+                          text: TextSpan(
+                            style: GoogleFonts.almendra(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10)),
+                            children: _buildHighlightedMessage(message, highlight),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, anim1, anim2, child) {
+        return SlideTransition(
+          position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero).animate(CurvedAnimation(parent: anim1, curve: Curves.easeOutCubic)),
+          child: FadeTransition(opacity: anim1, child: child),
+        );
+      },
+    );
+  }
+
+  List<InlineSpan> _buildHighlightedMessage(String message, String? highlight) {
+    if (highlight == null || !message.contains(highlight)) {
+      return [TextSpan(text: message)];
+    }
+    final parts = message.split(highlight);
+    return [
+      TextSpan(text: parts[0]),
+      TextSpan(text: highlight, style: const TextStyle(color: Color(0xFFC5A021), fontWeight: FontWeight.w900, fontSize: 20)),
+      TextSpan(text: parts[1]),
+    ];
+  }
+
+  void _showNextDayNotification(String message) {
+    final overlay = Overlay.of(context);
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (context) => _TopRightNotification(
+        message: message,
+        onFinished: () => entry.remove(),
+      ),
+    );
+    overlay.insert(entry);
+  }
 
   @override
   Widget build(BuildContext context) {
+    const textColor = Color(0xFF2D1B10);
+    const parchmentColor = Color(0xFFF4E4BC);
+    const goldColor = Color(0xFFC5A021); // Darker, rich gold
+
     return Consumer<GameState>(
       builder: (context, state, _) {
         final player = state.player;
@@ -64,447 +150,219 @@ class _HudOverlayState extends State<HudOverlay> {
 
         _displayCountry ??= player.country;
         final displayCountry = _displayCountry ?? player.country;
-        final displayCash = _convertCurrency(
-          player.cashBalance,
-          fromCountry: player.country,
-          toCountry: displayCountry,
-        );
-        final displayBank = _convertCurrency(
-          player.bankBalance,
-          fromCountry: player.country,
-          toCountry: displayCountry,
-        );
+        final displayCash = _convertCurrency(player.cashBalance, fromCountry: player.country, toCountry: displayCountry);
+        final displayBank = _convertCurrency(player.bankBalance, fromCountry: player.country, toCountry: displayCountry);
 
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Column(
+            child: Stack(
               children: [
-                // ── Top Bar (full width, landscape) ────────────
-                SizedBox(
-                  height: 36,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Player profile chip
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const ProfileScreen(),
-                              ),
-                            );
-                          },
-                          child: _HudChip(
-                            children: [
-                              Text(
-                                _countryFlags[player.country] ?? '🌏',
-                                style: const TextStyle(fontSize: 16),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                player.displayName,
-                                style: const TextStyle(
-                                  color: GameColors.uiText,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-
-                        // Cash badge
-                        _HudBadge(
-                          icon: Icons.monetization_on,
-                          label:
-                              CurrencyUtil.format(displayCash, displayCountry),
-                          color: GameColors.uiGold,
-                        ),
-                        const SizedBox(width: 6),
-
-                        // Bank badge (if registered)
-                        if (player.bankRegistered) ...[
-                          _HudBadge(
-                            icon: Icons.account_balance,
-                            label: CurrencyUtil.format(
-                              displayBank,
-                              displayCountry,
-                            ),
-                            color: GameColors.uiGreen,
-                          ),
-                          const SizedBox(width: 6),
+                // ── Top UI (Centered & Hidable) ──────────────────
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.easeInOutBack,
+                  top: _isTopUiHidden ? -100 : 0,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: parchmentColor,
+                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+                        border: Border.all(color: const Color(0xFF5D4037), width: 3),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4)),
                         ],
-
-                        GestureDetector(
-                          onTap: () {
-                            final currentIndex = _aseanCountries.indexOf(
-                              displayCountry,
-                            );
-                            final nextIndex =
-                                (currentIndex + 1) % _aseanCountries.length;
-                            setState(() {
-                              _displayCountry = _aseanCountries[nextIndex];
-                            });
-                          },
-                          child: _HudChip(
-                            children: [
-                              Text(
-                                _countryFlags[displayCountry] ?? '🌏',
-                                style: const TextStyle(fontSize: 15),
+                      ),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            GestureDetector(
+                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
+                              child: _HudChip(
+                                children: [
+                                  Text(_countryFlags[player.country] ?? '🌏', style: const TextStyle(fontSize: 18)),
+                                  const SizedBox(width: 8),
+                                  Text(player.displayName, style: GoogleFonts.cinzel(color: textColor, fontWeight: FontWeight.w900, fontSize: 14)),
+                                ],
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                displayCountry,
-                                style: const TextStyle(
-                                  color: GameColors.uiText,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(width: 12),
+                            _HudBadge(icon: Icons.monetization_on, label: CurrencyUtil.format(displayCash, displayCountry), color: Colors.orange.shade900),
+                            const SizedBox(width: 8),
+                            if (player.bankRegistered)
+                              _HudBadge(icon: Icons.account_balance, label: CurrencyUtil.format(displayBank, displayCountry), color: Colors.green.shade900),
+                            const SizedBox(width: 12),
+                            _CreditScoreBadge(score: player.creditScore),
+                            const SizedBox(width: 12),
+                            _HudBadge(icon: _weatherIcon(state.activeDisaster), label: _weatherLabel(state.activeDisaster), color: _weatherColor(state.activeDisaster)),
+                            const SizedBox(width: 8),
+                            _HudBadge(
+                              icon: state.isDaytime ? Icons.wb_sunny : Icons.nightlight_round,
+                              label: '${state.dayPhaseLabel} ${_formatCountdown(state.remainingCycleSeconds)}',
+                              color: state.isDaytime ? Colors.orange.shade800 : Colors.blue.shade900,
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 6),
-
-                        // Credit score badge
-                        _CreditScoreBadge(score: player.creditScore),
-                        const SizedBox(width: 6),
-
-                        _HudBadge(
-                           icon: Icons.inventory_2,
-                           label: '${player.totalInventoryItems}',
-                           color: GameColors.uiAccent,
-                        ),
-                        const SizedBox(width: 6),
-
-                        _HudBadge(
-                          icon: Icons.science,
-                          label: 'Fert ${state.fertilizerPackCount}',
-                          color: state.fertilizerPackCount > 0
-                              ? GameColors.uiHighlight
-                              : GameColors.uiTextDim,
-                        ),
-                        const SizedBox(width: 6),
-
-                        _HudBadge(
-                          icon: Icons.agriculture,
-                          label: state.tractorOwned
-                              ? (state.autoHarvestEnabled
-                                  ? 'Tractor Active'
-                                  : 'Tractor Paused')
-                              : 'No Tractor',
-                          color: state.tractorOwned
-                              ? (state.autoHarvestEnabled
-                                  ? GameColors.uiGreen
-                                  : GameColors.uiGold)
-                              : GameColors.uiTextDim,
-                        ),
-
-                        const SizedBox(width: 12),
-
-                        // Weather indicator
-                        _HudBadge(
-                          icon: _weatherIcon(state.activeDisaster),
-                          label: _weatherLabel(state.activeDisaster),
-                          color: _weatherColor(state.activeDisaster),
-                        ),
-                        const SizedBox(width: 6),
-
-                        _HudBadge(
-                          icon: state.isDaytime
-                              ? Icons.wb_sunny
-                              : Icons.nightlight_round,
-                          label:
-                              '${state.dayPhaseLabel} ${_formatCountdown(state.remainingCycleSeconds)}',
-                          color: state.isDaytime
-                              ? GameColors.uiGold
-                              : GameColors.uiAccent,
-                        ),
-                        const SizedBox(width: 6),
-
-                        // Day counter
-                        _HudBadge(
-                          icon: Icons.wb_sunny,
-                          label: state.gameDateLabel,
-                          color: GameColors.uiHighlight,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
 
-                const Spacer(),
+                // Top UI Toggle Button
+                Positioned(
+                  top: _isTopUiHidden ? 0 : 65,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _isTopUiHidden = !_isTopUiHidden),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: parchmentColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: const Color(0xFF5D4037), width: 2),
+                        ),
+                        child: Icon(
+                          _isTopUiHidden ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
+                          color: const Color(0xFF5D4037),
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
 
-                // ── Right-side action buttons (vertical column) ─
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.bottomRight,
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _HudChip(
+                // ── Bottom Right: Unified Tools Menu ──────────
+                Align(
+                  alignment: Alignment.bottomRight,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // Expanded Tools Bar (Vertical Extension)
+                      if (_isToolsExpanded)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          width: 100,
+                          decoration: BoxDecoration(
+                            color: parchmentColor,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: textColor, width: 3),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 10, offset: const Offset(4, 4)),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                'Free ${state.freeNextDayRemaining}/$kFreeManualNextDayPerRealDay',
-                                style: const TextStyle(
-                                  color: GameColors.uiText,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 11,
-                                ),
+                              // 1. Next Day with Count
+                              _ToolIcon(
+                                icon: Icons.skip_next,
+                                label: 'Next Day',
+                                sublabel: 'Free ${state.freeNextDayRemaining}/$kFreeManualNextDayPerRealDay',
+                                sublabel2: 'Then ',
+                                sublabelValue: '${kManualNextDayCost.toStringAsFixed(0)}',
+                                sublabelColor: goldColor,
+                                color: Colors.brown.shade800,
+                                onTap: () {
+                                  state.advanceDay().then((ok) {
+                                    if (ok) {
+                                      _showNextDayNotification('Day ${state.currentDay} Begins');
+                                    } else if (context.mounted) {
+                                      final cost = kManualNextDayCost.toStringAsFixed(0);
+                                      _showMessage('Exhausted', 'No free Next Day left today. Need $cost currency.', highlight: cost);
+                                    }
+                                  });
+                                },
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Then ${kManualNextDayCost.toStringAsFixed(0)}',
-                                style: const TextStyle(
-                                  color: GameColors.uiGold,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 11,
+                              _toolDivider(horizontal: true),
+                              // 2. Fertilizer (Below Next Day)
+                              _ToolIcon(
+                                icon: Icons.science,
+                                label: 'Fertilize',
+                                sublabel: '${state.fertilizerPackCount} packs',
+                                color: Colors.blue.shade900,
+                                onTap: () {
+                                  state.useFertilizerPack().then((boostedCount) {
+                                    if (boostedCount > 0) {
+                                      _showMessage('Alchemy!', 'Used 1 Fertilizer Pack. Boosted $boostedCount crops by +1 stage.');
+                                    } else if (boostedCount == 0) {
+                                      _showMessage('Patience', 'No growing crops to fertilize right now.');
+                                    } else {
+                                      _showMessage('Empty', 'No Fertilizer Pack available in your scroll.');
+                                    }
+                                  });
+                                },
+                              ),
+                              _toolDivider(horizontal: true),
+                              _ToolIcon(
+                                icon: Icons.workspace_premium, // Rank Icon
+                                label: 'Rank',
+                                color: Colors.amber.shade900,
+                                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LeaderboardScreen(player: player))),
+                              ),
+                              _toolDivider(horizontal: true),
+                              _ToolIcon(
+                                icon: Icons.person_pin_circle,
+                                label: 'Unstuck',
+                                color: Colors.red.shade900,
+                                onTap: () {
+                                  state.game?.respawnPlayer();
+                                  _showMessage('Hearthstone', 'The winds carry you back to the center of the realm.');
+                                },
+                              ),
+                              if (state.tractorOwned) ...[
+                                _toolDivider(horizontal: true),
+                                _ToolIcon(
+                                  icon: state.autoHarvestEnabled ? Icons.agriculture : Icons.agriculture_outlined,
+                                  label: 'Tractor',
+                                  color: state.autoHarvestEnabled ? Colors.green.shade700 : Colors.grey.shade700,
+                                  onTap: () => state.setAutoHarvestEnabled(!state.autoHarvestEnabled),
                                 ),
+                              ],
+                              _toolDivider(horizontal: true),
+                              _ToolIcon(
+                                icon: state.isCameraFollow ? Icons.zoom_in : Icons.fullscreen,
+                                label: state.isCameraFollow ? 'Zoom' : 'Full',
+                                color: Colors.teal.shade900,
+                                onTap: () => state.toggleCameraFollow(),
+                              ),
+                              _toolDivider(horizontal: true),
+                              _ToolIcon(
+                                icon: Icons.warning_amber,
+                                label: 'Chaos',
+                                color: Colors.deepPurple.shade600, // Brighter purple
+                                onTap: () => _showDisasterDialog(context, state),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 6),
-                          _HudActionButton(
-                            icon: Icons.skip_next,
-                            tooltip: 'Next Day',
-                            color: GameColors.uiHighlight,
-                            onPressed: () {
-                              state.advanceDay().then((ok) {
-                                if (!ok && context.mounted) {
-                                  final messenger =
-                                      ScaffoldMessenger.of(context);
-                                  messenger
-                                    ..hideCurrentSnackBar()
-                                    ..clearSnackBars();
-                                  messenger.showSnackBar(
-                                    SnackBar(
-                                      duration: const Duration(seconds: 2),
-                                      behavior: SnackBarBehavior.floating,
-                                      showCloseIcon: true,
-                                      dismissDirection: DismissDirection.down,
-                                      content: Text(
-                                        'No free Next Day left today. Need ${kManualNextDayCost.toStringAsFixed(0)} currency.',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 6),
-                          if (state.tractorOwned) ...[
-                            _HudActionButton(
-                              icon: state.autoHarvestEnabled
-                                  ? Icons.agriculture
-                                  : Icons.agriculture_outlined,
-                              tooltip: state.autoHarvestEnabled
-                                  ? 'Disable Auto Harvest'
-                                  : 'Enable Auto Harvest',
-                              color: state.autoHarvestEnabled
-                                  ? GameColors.uiGreen
-                                  : GameColors.uiGold,
-                              onPressed: () {
-                                final target = !state.autoHarvestEnabled;
-                                state.setAutoHarvestEnabled(target).then((ok) {
-                                  if (!ok || !context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      duration: const Duration(seconds: 1),
-                                      content: Text(
-                                        target
-                                            ? 'Auto harvest enabled.'
-                                            : 'Auto harvest paused.',
-                                      ),
-                                    ),
-                                  );
-                                });
-                              },
-                            ),
-                            const SizedBox(height: 6),
-                          ],
-                          _HudActionButton(
-                            icon: Icons.science,
-                            tooltip: 'Use Fertilizer Pack',
-                            color: state.fertilizerPackCount > 0
-                                ? GameColors.uiHighlight
-                                : GameColors.uiTextDim,
-                            onPressed: () {
-                              state.useFertilizerPack().then((boostedCount) {
-                                if (!context.mounted) return;
-                                final messenger = ScaffoldMessenger.of(context);
-                                messenger
-                                  ..hideCurrentSnackBar()
-                                  ..clearSnackBars();
+                        ),
 
-                                if (boostedCount > 0) {
-                                  messenger.showSnackBar(
-                                    SnackBar(
-                                      duration: const Duration(seconds: 2),
-                                      behavior: SnackBarBehavior.floating,
-                                      showCloseIcon: true,
-                                      dismissDirection: DismissDirection.down,
-                                      content: Text(
-                                        'Used 1 Fertilizer Pack. Boosted $boostedCount crops by +1 stage.',
-                                      ),
-                                    ),
-                                  );
-                                  return;
-                                }
-
-                                if (boostedCount == 0) {
-                                  messenger.showSnackBar(
-                                    const SnackBar(
-                                      duration: Duration(seconds: 2),
-                                      behavior: SnackBarBehavior.floating,
-                                      showCloseIcon: true,
-                                      dismissDirection: DismissDirection.down,
-                                      content: Text(
-                                        'No growing crops to fertilize right now.',
-                                      ),
-                                    ),
-                                  );
-                                  return;
-                                }
-
-                                messenger.showSnackBar(
-                                  const SnackBar(
-                                    duration: Duration(seconds: 2),
-                                    behavior: SnackBarBehavior.floating,
-                                    showCloseIcon: true,
-                                    dismissDirection: DismissDirection.down,
-                                    content: Text(
-                                      'No Fertilizer Pack available or use failed.',
-                                    ),
-                                  ),
-                                );
-                              });
-                            },
+                      // Toggle Button
+                      GestureDetector(
+                        onTap: () => setState(() => _isToolsExpanded = !_isToolsExpanded),
+                        child: Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF5D4037),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: const Color(0xFFF4E4BC), width: 3),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 8, offset: const Offset(2, 2)),
+                            ],
                           ),
-                          const SizedBox(height: 6),
-                          _HudActionButton(
-                            icon: Icons.account_balance,
-                            tooltip: 'Bank',
-                            color: GameColors.uiGreen,
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const BankScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 6),
-                          _HudActionButton(
-                            icon: Icons.shopping_cart,
-                            tooltip: 'Merchant',
-                            color: GameColors.uiGold,
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const MerchantScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 6),
-                          _HudActionButton(
-                            icon: Icons.warning_amber,
-                            tooltip: 'Simulate Disaster',
-                            color: Colors.orange,
-                            onPressed: () {
-                              showDialog(
-                                context: context,
-                                builder: (_) {
-                                  return AlertDialog(
-                                    title: const Text('Simulate Disaster'),
-                                    content: const Text(
-                                      'Choose a disaster to trigger immediately.',
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () {
-                                          state.triggerDisaster(
-                                            DisasterType.flood,
-                                          );
-                                          Navigator.of(context).pop();
-                                        },
-                                        child: const Text('Flood'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () {
-                                          state.triggerDisaster(
-                                            DisasterType.storm,
-                                          );
-                                          Navigator.of(context).pop();
-                                        },
-                                        child: const Text('Storm'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () {
-                                          state.triggerDisaster(
-                                            DisasterType.drought,
-                                          );
-                                          Navigator.of(context).pop();
-                                        },
-                                        child: const Text('Drought'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.of(context).pop(),
-                                        child: const Text('Cancel'),
-                                      ),
-                                    ],
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 6),
-                          _HudActionButton(
-                            icon: Icons.person_pin_circle,
-                            tooltip: 'Unstuck (Respawn)',
-                            color: Colors.blueAccent,
-                            onPressed: () {
-                              state.game?.respawnPlayer();
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    duration: Duration(seconds: 1),
-                                    content: Text('Respawned at map center.'),
-                                  ),
-                                );
-                              }
-                            },
-                          ),
-                          const SizedBox(height: 6),
-                          _HudActionButton(
-                            icon: Icons.leaderboard,
-                            tooltip: 'Leaderboard',
-                            color: Colors.amber,
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => LeaderboardScreen(
-                                    player: player,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
+                          child: Icon(_isToolsExpanded ? Icons.close : Icons.handyman, color: const Color(0xFFF4E4BC), size: 32),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ],
@@ -515,67 +373,141 @@ class _HudOverlayState extends State<HudOverlay> {
     );
   }
 
-  double _convertCurrency(
-    double amount, {
-    required String fromCountry,
-    required String toCountry,
-  }) {
+  Widget _toolDivider({bool horizontal = false}) {
+    if (horizontal) return Container(height: 2, width: 60, color: Colors.brown.withOpacity(0.2), margin: const EdgeInsets.symmetric(vertical: 8));
+    return Container(width: 2, height: 30, color: Colors.brown.withOpacity(0.2), margin: const EdgeInsets.symmetric(horizontal: 12));
+  }
+
+  void _showDisasterDialog(BuildContext context, GameState state) {
+    const textColor = Color(0xFF2D1B10);
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFFF4E4BC),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: Color(0xFF5D4037), width: 4)),
+        title: Text('Trigger Chaos', style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, color: textColor)),
+        content: Text('Choose a disaster to test your farm.', style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: textColor, fontSize: 18)),
+        actions: [
+          _disasterButton('Flood', Colors.blue.shade900, () => state.triggerDisaster(DisasterType.flood)),
+          _disasterButton('Storm', Colors.red.shade900, () => state.triggerDisaster(DisasterType.storm)),
+          _disasterButton('Drought', Colors.orange.shade900, () => state.triggerDisaster(DisasterType.drought)),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: GoogleFonts.cinzel(color: Colors.grey.shade700, fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+  }
+
+  Widget _disasterButton(String label, Color color, VoidCallback onTrigger) {
+    return TextButton(
+      onPressed: () { onTrigger(); Navigator.pop(context); },
+      child: Text(label, style: GoogleFonts.cinzel(color: color, fontWeight: FontWeight.w900, fontSize: 16)),
+    );
+  }
+
+  double _convertCurrency(double amount, {required String fromCountry, required String toCountry}) {
     final fromRate = _currencyToUsdRate[fromCountry];
     final toRate = _currencyToUsdRate[toCountry];
     if (fromRate == null || toRate == null || fromRate == 0) return amount;
-    final amountInUsd = amount * fromRate;
-    return amountInUsd / toRate;
+    return (amount * fromRate) / toRate;
   }
 
   String _formatCountdown(int seconds) {
-    final min = (seconds ~/ 60).toString().padLeft(2, '0');
-    final sec = (seconds % 60).toString().padLeft(2, '0');
-    return '$min:$sec';
+    return '${(seconds ~/ 60).toString().padLeft(2, '0')}:${(seconds % 60).toString().padLeft(2, '0')}';
   }
 
   IconData _weatherIcon(dynamic disaster) {
     switch (disaster.toString()) {
-      case 'DisasterType.flood':
-        return Icons.water;
-      case 'DisasterType.storm':
-        return Icons.flash_on;
-      case 'DisasterType.drought':
-        return Icons.local_fire_department;
-      default:
-        return Icons.cloud;
+      case 'DisasterType.flood': return Icons.water;
+      case 'DisasterType.storm': return Icons.flash_on;
+      case 'DisasterType.drought': return Icons.local_fire_department;
+      default: return Icons.cloud;
     }
   }
 
   String _weatherLabel(dynamic disaster) {
     switch (disaster.toString()) {
-      case 'DisasterType.flood':
-        return 'Flood!';
-      case 'DisasterType.storm':
-        return 'Storm!';
-      case 'DisasterType.drought':
-        return 'Drought!';
-      default:
-        return 'Clear';
+      case 'DisasterType.flood': return 'Flood!';
+      case 'DisasterType.storm': return 'Storm!';
+      case 'DisasterType.drought': return 'Drought!';
+      default: return 'Clear';
     }
   }
 
   Color _weatherColor(dynamic disaster) {
     switch (disaster.toString()) {
-      case 'DisasterType.flood':
-        return GameColors.rainDrop;
-      case 'DisasterType.storm':
-        return GameColors.uiRed;
-      case 'DisasterType.drought':
-        return Colors.orange;
-      default:
-        return GameColors.uiTextDim;
+      case 'DisasterType.flood': return Colors.blue.shade900;
+      case 'DisasterType.storm': return Colors.red.shade900;
+      case 'DisasterType.drought': return Colors.orange.shade900;
+      default: return const Color(0xFF2D1B10).withOpacity(0.6);
     }
   }
 }
 
-// ─── Sub-widgets ──────────────────────────────────────────────
+class _TopRightNotification extends StatefulWidget {
+  final String message;
+  final VoidCallback onFinished;
+  const _TopRightNotification({required this.message, required this.onFinished});
 
-/// Generic chip wrapper for top bar items.
+  @override
+  State<_TopRightNotification> createState() => _TopRightNotificationState();
+}
+
+class _TopRightNotificationState extends State<_TopRightNotification> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<Offset> _offsetAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
+    _offsetAnimation = Tween<Offset>(begin: const Offset(1.5, 0), end: Offset.zero).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
+    _controller.forward();
+    Future.delayed(const Duration(seconds: 3), () async {
+      if (mounted) {
+        await _controller.reverse();
+        widget.onFinished();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: 100,
+      right: 20,
+      child: SlideTransition(
+        position: _offsetAnimation,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF4E4BC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF5D4037), width: 3),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 10, offset: const Offset(4, 4))],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.wb_sunny, color: Colors.orange, size: 20),
+                const SizedBox(width: 8),
+                Text(widget.message, style: GoogleFonts.cinzel(color: const Color(0xFF2D1B10), fontWeight: FontWeight.w900, fontSize: 14)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _HudChip extends StatelessWidget {
   final List<Widget> children;
   const _HudChip({required this.children});
@@ -583,11 +515,10 @@ class _HudChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: GameColors.uiPanel.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: GameColors.uiAccent.withValues(alpha: 0.5)),
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: children),
     );
@@ -599,80 +530,53 @@ class _HudBadge extends StatelessWidget {
   final String label;
   final Color color;
 
-  const _HudBadge({
-    required this.icon,
-    required this.label,
-    required this.color,
-  });
+  const _HudBadge({required this.icon, required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: GameColors.uiPanel.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color, size: 16),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-            ),
-          ),
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 6),
+          Text(label, style: GoogleFonts.cinzel(color: color, fontWeight: FontWeight.w900, fontSize: 13)),
         ],
       ),
     );
   }
 }
 
-/// Compact credit score badge with color coding.
 class _CreditScoreBadge extends StatelessWidget {
   final int score;
   const _CreditScoreBadge({required this.score});
 
   Color get _color {
-    if (score >= 700) return GameColors.uiGreen;
-    if (score >= 550) return GameColors.uiGold;
-    return GameColors.uiRed;
+    if (score >= 700) return Colors.green.shade900;
+    if (score >= 550) return Colors.orange.shade900;
+    return Colors.red.shade900;
   }
 
   @override
   Widget build(BuildContext context) {
     final normalized = ((score - 300) / 550).clamp(0.0, 1.0);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: GameColors.uiPanel.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _color.withValues(alpha: 0.45)),
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            width: 30,
-            height: 18,
-            child: CustomPaint(
-              painter: _SemiGaugePainter(progress: normalized, color: _color),
-            ),
-          ),
-          const SizedBox(width: 5),
-          Text(
-            '$score',
-            style: TextStyle(
-              color: _color,
-              fontWeight: FontWeight.w800,
-              fontSize: 11,
-            ),
-          ),
+          SizedBox(width: 30, height: 18, child: CustomPaint(painter: _SemiGaugePainter(progress: normalized, color: _color))),
+          const SizedBox(width: 8),
+          Text('$score', style: GoogleFonts.cinzel(color: _color, fontWeight: FontWeight.w900, fontSize: 12)),
         ],
       ),
     );
@@ -682,85 +586,71 @@ class _CreditScoreBadge extends StatelessWidget {
 class _SemiGaugePainter extends CustomPainter {
   final double progress;
   final Color color;
-
   const _SemiGaugePainter({required this.progress, required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height);
     final radius = math.min(size.width / 2, size.height - 1);
+    final basePaint = Paint()..color = color.withOpacity(0.2)..style = PaintingStyle.stroke..strokeWidth = 3..strokeCap = StrokeCap.round;
+    final progressPaint = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 3..strokeCap = StrokeCap.round;
 
-    final basePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.2)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round;
-
-    final progressPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      math.pi,
-      math.pi,
-      false,
-      basePaint,
-    );
-
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      math.pi,
-      math.pi * progress,
-      false,
-      progressPaint,
-    );
+    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), math.pi, math.pi, false, basePaint);
+    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), math.pi, math.pi * progress, false, progressPaint);
   }
 
   @override
-  bool shouldRepaint(covariant _SemiGaugePainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.color != color;
-  }
+  bool shouldRepaint(covariant _SemiGaugePainter oldDelegate) => oldDelegate.progress != progress || oldDelegate.color != color;
 }
 
-class _HudActionButton extends StatelessWidget {
+class _ToolIcon extends StatelessWidget {
   final IconData icon;
-  final String tooltip;
+  final String label;
+  final String? sublabel;
+  final String? sublabel2;
+  final String? sublabelValue;
+  final Color? sublabelColor;
   final Color color;
-  final VoidCallback onPressed;
+  final VoidCallback onTap;
 
-  const _HudActionButton({
-    required this.icon,
-    required this.tooltip,
-    required this.color,
-    required this.onPressed,
+  const _ToolIcon({
+    required this.icon, 
+    required this.label, 
+    this.sublabel, 
+    this.sublabel2, 
+    this.sublabelValue, 
+    this.sublabelColor, 
+    required this.color, 
+    required this.onTap
   });
 
   @override
   Widget build(BuildContext context) {
-    // Min 44x44pt touch target (mobile-games skill)
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: GameColors.uiPanel.withValues(alpha: 0.85),
-        shape: const CircleBorder(),
-        elevation: 4,
-        child: InkWell(
-          onTap: onPressed,
-          customBorder: const CircleBorder(),
-          child: Container(
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: color.withValues(alpha: 0.5)),
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 28),
+          const SizedBox(height: 2),
+          Text(label, style: GoogleFonts.cinzel(color: color, fontSize: 10, fontWeight: FontWeight.w900)),
+          if (sublabel != null)
+            RichText(
+              textAlign: TextAlign.center,
+              text: TextSpan(
+                style: GoogleFonts.almendra(color: color.withOpacity(0.7), fontSize: 8, fontWeight: FontWeight.bold),
+                children: [
+                  TextSpan(text: sublabel!),
+                  if (sublabel2 != null) TextSpan(text: '\n${sublabel2!}'),
+                  if (sublabelValue != null) 
+                    TextSpan(
+                      text: sublabelValue!,
+                      style: TextStyle(color: sublabelColor ?? color, fontWeight: FontWeight.w900),
+                    ),
+                ],
+              ),
             ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-        ),
+        ],
       ),
     );
   }
