@@ -10,16 +10,17 @@ import 'package:farm_fintech/models/weather_event.dart';
 
 // ── Pre-computed constant colors (avoid per-frame Color construction) ──
 
-const Color _floodTint = Color(0x266EC6FF);
 const Color _stormTint = Color(0x403D3D5C);
 const Color _droughtTint = Color(0x44FF8800);
-const Color _floodWaterColor = Color(0x8844AAFF);
-const Color _floodHighlight = Color(0x408CD2FF);
 const Color _lightningFlashColor = Color(0x40FFFFFF);
 const Color _lightningBoltColor = Color(0xDDFFFF00);
 const Color _shimmerColor = Color(0x10FFFFFF);
 const Color _sunCoreColor = Color(0xA6FFEB3B);
 const Color _sunGlowColor = Color(0x1FFFEB3B);
+
+// ── Flood ambient colors ──
+const Color _floodAmbientBase = Color(0xFF003344); // Deep teal / navy
+const Color _rippleColor = Color(0xFF66CCFF);       // Light blue for ripples
 
 // Rain drop colors at different opacities (pre-baked to avoid Color.fromRGBO per frame)
 const List<Color> _rainColors = [
@@ -48,11 +49,37 @@ class _RainDrop {
   });
 }
 
+/// A single ripple particle — spawned at a random position, expands and fades.
+class _Ripple {
+  double x;
+  double y;
+  double radius;
+  double maxRadius;
+  double alpha;
+  double speed; // expansion speed in px/s
+
+  _Ripple({
+    required this.x,
+    required this.y,
+    required this.maxRadius,
+    required this.speed,
+  })  : radius = 0,
+        alpha = 0.6;
+
+  /// Returns true when the ripple has fully faded out and should be removed.
+  bool update(double dt) {
+    radius += speed * dt;
+    // Fade linearly as the ripple expands
+    alpha = (1.0 - radius / maxRadius).clamp(0.0, 1.0) * 0.5;
+    return radius >= maxRadius;
+  }
+}
+
 /// Flame viewport overlay that renders weather visual effects.
 ///
 /// Added to `camera.viewport` so it draws in screen-space on top of the
 /// game world. Supports all four [DisasterType] states:
-/// - **flood**: blue tint + rain + rising water
+/// - **flood**: ambient deep-teal overlay + breathing alpha + rain + ripple particles
 /// - **storm**: dark tint + heavy rain + lightning flashes
 /// - **drought**: orange tint + heat shimmer + harsh sun
 /// - **none**: nothing rendered
@@ -64,7 +91,9 @@ class WeatherEffectComponent extends Component
   bool _lightningFlash = false;
 
   final List<_RainDrop> _drops = [];
+  final List<_Ripple> _ripples = [];
   final Random _rng = Random();
+  double _rippleSpawnTimer = 0;
 
   WeatherEffectComponent() {
     priority = -1; // Render behind joystick for clean UX
@@ -81,6 +110,8 @@ class WeatherEffectComponent extends Component
     _elapsed = 0;
     _lightningCooldown = 2.0;
     _lightningFlash = false;
+    _ripples.clear();
+    _rippleSpawnTimer = 0;
   }
 
   // ── Lifecycle ───────────────────────────────────────────────
@@ -108,6 +139,28 @@ class WeatherEffectComponent extends Component
         _lightningFlash = false;
       }
     }
+
+    // Flood ripple particle system
+    if (_weather == DisasterType.flood) {
+      _rippleSpawnTimer -= dt;
+      if (_rippleSpawnTimer <= 0) {
+        final w = game.size.x;
+        final h = game.size.y;
+        if (w > 1 && h > 1) {
+          _ripples.add(_Ripple(
+            x: _rng.nextDouble() * w,
+            y: _rng.nextDouble() * h,
+            maxRadius: 12 + _rng.nextDouble() * 20,
+            speed: 15 + _rng.nextDouble() * 25,
+          ));
+        }
+        // Spawn a new ripple every 0.15–0.4 seconds
+        _rippleSpawnTimer = 0.15 + _rng.nextDouble() * 0.25;
+      }
+
+      // Update existing ripples, remove dead ones
+      _ripples.removeWhere((r) => r.update(dt));
+    }
   }
 
   @override
@@ -124,9 +177,9 @@ class WeatherEffectComponent extends Component
 
     switch (_weather) {
       case DisasterType.flood:
-        _tint(canvas, sw, sh, _floodTint);
+        _floodAmbient(canvas, sw, sh);
         _rain(canvas, sw, sh, count: 200);
-        _floodWater(canvas, sw, sh);
+        _floodRipples(canvas);
       case DisasterType.storm:
         _tint(canvas, sw, sh, _stormTint);
         _rain(canvas, sw, sh, count: 280, heavy: true);
@@ -164,6 +217,38 @@ class WeatherEffectComponent extends Component
     );
   }
 
+  // ─── Flood: Ambient water overlay + breathing ──────────────
+
+  void _floodAmbient(Canvas canvas, double w, double h) {
+    // Breathing effect: slow sinusoidal alpha oscillation (0.40 – 0.55)
+    // Using a very slow frequency (~0.4 Hz) for a calm, submerged feel
+    final breathe = sin(_elapsed * 0.4) * 0.075; // oscillates ±0.075
+    final alpha = (0.48 + breathe).clamp(0.0, 1.0);
+
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, w, h),
+      Paint()..color = _floodAmbientBase.withValues(alpha: alpha),
+    );
+  }
+
+  // ─── Flood: Ripple particles ──────────────────────────────
+
+  void _floodRipples(Canvas canvas) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+
+    for (final ripple in _ripples) {
+      if (ripple.alpha <= 0.01) continue;
+      paint.color = _rippleColor.withValues(alpha: ripple.alpha);
+      canvas.drawCircle(
+        Offset(ripple.x, ripple.y),
+        ripple.radius,
+        paint,
+      );
+    }
+  }
+
   // ─── Rain ──────────────────────────────────────────────────
 
   void _rain(Canvas canvas, double w, double h,
@@ -188,36 +273,6 @@ class WeatherEffectComponent extends Component
         paint,
       );
     }
-  }
-
-  // ─── Flood water ───────────────────────────────────────────
-
-  void _floodWater(Canvas canvas, double w, double h) {
-    final waterH = h * 0.85; // Flood rises to cover 85% of the screen
-    final bob = sin(_elapsed * 2) * 4;
-
-    // Wavy water surface
-    final path = Path()..moveTo(0, h - waterH + bob);
-    for (var x = 0.0; x <= w; x += 16) {
-      final wave = sin(x / 35 + _elapsed * 3) * 5;
-      path.lineTo(x, h - waterH + wave + bob);
-    }
-    path.lineTo(w, h);
-    path.lineTo(0, h);
-    path.close();
-
-    canvas.drawPath(path, Paint()..color = _floodWaterColor);
-
-    // Surface highlight
-    final hl = Path()..moveTo(0, h - waterH + bob + 4);
-    for (var x = 0.0; x <= w; x += 16) {
-      final wave = sin(x / 35 + _elapsed * 3) * 5;
-      hl.lineTo(x, h - waterH + wave + bob + 4);
-    }
-    hl.lineTo(w, h - waterH + bob + 10);
-    hl.lineTo(0, h - waterH + bob + 10);
-    hl.close();
-    canvas.drawPath(hl, Paint()..color = _floodHighlight);
   }
 
   // ─── Lightning ─────────────────────────────────────────────
