@@ -151,15 +151,18 @@ class GameState extends ChangeNotifier {
         }
       }
     } else if (interactionMenuState == InteractionMenuState.plant) {
-      if (key == 1) plantCropInteraction(CropType.wheat);
-      else if (key == 2) plantCropInteraction(CropType.rice);
+      if (key == 1) {
+        plantCropInteraction(CropType.wheat);
+      } else if (key == 2) plantCropInteraction(CropType.rice);
       else if (key == 3) plantCropInteraction(CropType.corn);
     } else if (interactionMenuState == InteractionMenuState.harvest) {
-      if (key == 1) harvestCropInteraction(sell: false);
-      else if (key == 2) harvestCropInteraction(sell: true);
+      if (key == 1) {
+        harvestCropInteraction(sell: false);
+      } else if (key == 2) harvestCropInteraction(sell: true);
     } else if (interactionMenuState == InteractionMenuState.confirmRemove) {
-      if (key == 1) removeCrop();
-      else if (key == 2) setInteractionMenuState(InteractionMenuState.main);
+      if (key == 1) {
+        removeCrop();
+      } else if (key == 2) setInteractionMenuState(InteractionMenuState.main);
     }
   }
 
