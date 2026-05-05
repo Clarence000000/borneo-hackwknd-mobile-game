@@ -250,7 +250,7 @@ class _BnplPlanCard extends StatelessWidget {
                 onPressed: () => state.repayBnplPlan(plan.id, PaymentMethod.cash),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF5D4037),
-                  foregroundColor: Colors.white,
+                  foregroundColor: const Color(0xFFF4E4BC),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 ),
                 child: Text('Repay Cash', style: GoogleFonts.cinzel(fontSize: 12, fontWeight: FontWeight.bold)),
@@ -351,13 +351,27 @@ class _EquipmentCard extends StatelessWidget {
             children: [
               Expanded(
                 child: ElevatedButton(
-                  onPressed: canBuyWithCash ? () => state.buyEquipment(equipment.price, PaymentMethod.cash) : null,
+                  onPressed: canBuyWithCash
+                      ? () async {
+                          final success = await state.buyEquipment(
+                            equipment.price,
+                            PaymentMethod.cash,
+                          );
+                          if (success) {
+                            await state.unlockEquipment(equipment.name);
+                          }
+                        }
+                      : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF5D4037),
-                    foregroundColor: Colors.white,
+                    foregroundColor: const Color(0xFFF4E4BC), // Parchment instead of white
                     padding: const EdgeInsets.symmetric(vertical: 12),
+                    disabledBackgroundColor: const Color(0xFF5D4037).withOpacity(0.3),
+                    disabledForegroundColor: const Color(0xFF2D1B10).withOpacity(0.5),
                   ),
-                  child: Text('BUY (CASH)', style: GoogleFonts.cinzel(fontSize: 14, fontWeight: FontWeight.bold)),
+                  child: Text('BUY (CASH)',
+                      style: GoogleFonts.cinzel(
+                          fontSize: 14, fontWeight: FontWeight.w900)),
                 ),
               ),
               const SizedBox(width: 12),
@@ -450,7 +464,7 @@ class _MarketSellSection extends StatelessWidget {
                 onPressed: () => state.sellInventoryCrop(entry.key),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green.shade900,
-                  foregroundColor: Colors.white,
+                  foregroundColor: const Color(0xFFF4E4BC),
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 ),
                 child: Text('SELL ALL', style: GoogleFonts.cinzel(fontSize: 14, fontWeight: FontWeight.w900)),

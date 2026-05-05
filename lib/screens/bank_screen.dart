@@ -450,7 +450,7 @@ class _CreditScoreCard extends StatelessWidget {
                   onPressed: refreshing ? null : onRefresh,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _scoreColor,
-                    foregroundColor: Colors.white,
+                    foregroundColor: const Color(0xFFF4E4BC),
                     padding:
                         const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
@@ -694,8 +694,10 @@ class _LoanPlannerCard extends StatelessWidget {
             onPressed: onApply,
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF5D4037),
-              foregroundColor: Colors.white,
+              foregroundColor: const Color(0xFFF4E4BC),
               padding: const EdgeInsets.symmetric(vertical: 16),
+              disabledBackgroundColor: const Color(0xFF5D4037).withOpacity(0.3),
+              disabledForegroundColor: const Color(0xFF2D1B10).withOpacity(0.6),
             ),
             child: Text(onApply != null ? 'Apply for Loan' : 'Score Too Low',
                 style: GoogleFonts.cinzel(fontSize: 18, fontWeight: FontWeight.w900)),
@@ -786,7 +788,7 @@ class _ActionCard extends StatelessWidget {
               onPressed: onPressed,
               style: ElevatedButton.styleFrom(
                   backgroundColor: buttonColor, 
-                  foregroundColor: Colors.white,
+                  foregroundColor: const Color(0xFFF4E4BC),
                   padding: const EdgeInsets.symmetric(vertical: 12)),
               child: Text(buttonText,
                   style: GoogleFonts.cinzel(
@@ -817,7 +819,7 @@ class _QuickActionButton extends StatelessWidget {
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
         backgroundColor: color,
-        foregroundColor: Colors.white,
+        foregroundColor: const Color(0xFFF4E4BC),
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       ),
       onPressed: onPressed,
