@@ -14,6 +14,7 @@ import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/services/firestore_service.dart';
 import 'package:farm_fintech/widgets/dialog_popup.dart';
 import 'package:farm_fintech/widgets/hud_overlay.dart';
+import 'package:farm_fintech/widgets/interaction_overlay.dart';
 import 'package:farm_fintech/utils/currency_util.dart';
 import 'package:farm_fintech/services/seed_service.dart';
 import 'package:farm_fintech/screens/bank_screen.dart';
@@ -137,6 +138,9 @@ class _GameScreenState extends State<GameScreen> {
 
               // ── Layer 3: Tile Action Bar (bottom sheet) ─────
               if (state.selectedTile != null) _buildTileActionBar(state),
+
+              // ── Layer 4: Interaction Overlay ────────────────
+              InteractionOverlay(game: _game),
             ],
           );
         },

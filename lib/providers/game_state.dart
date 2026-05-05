@@ -14,6 +14,9 @@ import 'package:farm_fintech/models/financial/insurance.dart';
 import 'package:farm_fintech/services/cloud_functions_service.dart';
 import 'package:farm_fintech/services/firestore_service.dart';
 import 'package:farm_fintech/services/weather_service.dart';
+import 'package:farm_fintech/engine/components/building_component.dart';
+
+enum InteractionMenuState { main, plant, harvest, confirmRemove }
 
 /// Central game state managed via [ChangeNotifier].
 class GameState extends ChangeNotifier {
@@ -71,6 +74,114 @@ class GameState extends ChangeNotifier {
 
   // ── Crop selection for planting ─────────────────────────────
   CropType? selectedCropToPlant;
+
+  // ── Interaction ───────────────────────────────────────────────
+  (int, int)? interactableTile;
+  BuildingComponent? interactableBuilding;
+  InteractionMenuState interactionMenuState = InteractionMenuState.main;
+
+  void updateInteractableTile((int, int)? tile) {
+    if (interactableTile?.$1 == tile?.$1 && interactableTile?.$2 == tile?.$2) return;
+    interactableTile = tile;
+    interactionMenuState = InteractionMenuState.main; // Reset menu on tile change
+    notifyListeners();
+  }
+
+  void updateInteractableBuilding(BuildingComponent? building) {
+    if (interactableBuilding == building) return;
+    interactableBuilding = building;
+    interactionMenuState = InteractionMenuState.main;
+    notifyListeners();
+  }
+
+  void setInteractionMenuState(InteractionMenuState state) {
+    if (interactionMenuState == state) return;
+    interactionMenuState = state;
+    notifyListeners();
+  }
+
+  Future<bool> removeCrop() async {
+    if (interactableTile == null || player == null) return false;
+    final (col, row) = interactableTile!;
+    final tile = grid[row][col];
+
+    if (!tile.hasCrop) return false;
+
+    tile.destroyCrop();
+
+    try {
+      await _saveGridState();
+      game?.removeCropComponent(col, row);
+      interactionMenuState = InteractionMenuState.main;
+      notifyListeners();
+      return true;
+    } catch (_) {
+      // Revert is complex, but in a simple implementation, we can assume success
+      return false;
+    }
+  }
+
+  void handleInteractionKey(int key) {
+    if (interactableBuilding != null) {
+      if (key == 1 && interactionMenuState == InteractionMenuState.main) {
+        game?.onBuildingTapped?.call(interactableBuilding!.buildingType);
+      }
+      return;
+    }
+
+    if (interactableTile == null) return;
+    final (col, row) = interactableTile!;
+    final tile = grid[row][col];
+
+    if (interactionMenuState == InteractionMenuState.main) {
+      if (!tile.hasCrop) {
+        // Empty tile: 1. Plant
+        if (key == 1) setInteractionMenuState(InteractionMenuState.plant);
+      } else if (tile.isHarvestable) {
+        // Ready tile: 1. Harvest, 2. Remove
+        if (key == 1) {
+          setInteractionMenuState(InteractionMenuState.harvest);
+        } else if (key == 2) {
+          setInteractionMenuState(InteractionMenuState.confirmRemove);
+        }
+      } else if (tile.hasCrop) {
+        // Growing tile: 1. Remove
+        if (key == 1) {
+          setInteractionMenuState(InteractionMenuState.confirmRemove);
+        }
+      }
+    } else if (interactionMenuState == InteractionMenuState.plant) {
+      if (key == 1) plantCropInteraction(CropType.wheat);
+      else if (key == 2) plantCropInteraction(CropType.rice);
+      else if (key == 3) plantCropInteraction(CropType.corn);
+    } else if (interactionMenuState == InteractionMenuState.harvest) {
+      if (key == 1) harvestCropInteraction(sell: false);
+      else if (key == 2) harvestCropInteraction(sell: true);
+    } else if (interactionMenuState == InteractionMenuState.confirmRemove) {
+      if (key == 1) removeCrop();
+      else if (key == 2) setInteractionMenuState(InteractionMenuState.main);
+    }
+  }
+
+  Future<void> plantCropInteraction(CropType type) async {
+    // Temporary override selectedTile for plantCrop to work
+    final oldSelected = selectedTile;
+    selectedTile = interactableTile;
+    await plantCrop(type);
+    selectedTile = oldSelected;
+    setInteractionMenuState(InteractionMenuState.main);
+  }
+
+  Future<void> harvestCropInteraction({required bool sell}) async {
+    final oldSelected = selectedTile;
+    selectedTile = interactableTile;
+    final harvested = await harvestCrop();
+    if (harvested != null && sell) {
+      await sellInventoryCrop(harvested.name, quantity: 1);
+    }
+    selectedTile = oldSelected;
+    setInteractionMenuState(InteractionMenuState.main);
+  }
 
   GameState() {
     _initGrid();

@@ -11,6 +11,7 @@ import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/engine/components/building_component.dart';
 import 'package:farm_fintech/engine/components/crop_component.dart';
 import 'package:farm_fintech/engine/components/player_component.dart';
+import 'package:farm_fintech/engine/components/interaction_keyboard_handler.dart';
 import 'package:farm_fintech/engine/crop_image_registry.dart';
 import 'package:farm_fintech/providers/game_state.dart';
 
@@ -40,6 +41,7 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
 
   /// Buildings on the map.
   final List<BuildingComponent> _buildings = [];
+  List<BuildingComponent> get buildings => _buildings;
 
   /// Callback when a building is tapped — set by GameScreen for navigation.
   void Function(BuildingType type)? onBuildingTapped;
@@ -83,6 +85,9 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     playerComponent.mapWidth = _mapWidth;
     playerComponent.mapHeight = _mapHeight;
     world.add(playerComponent);
+
+    // Keyboard handler for crop interactions
+    add(InteractionKeyboardHandler());
 
     // Joystick (always shown — on mobile it's the primary control,
     // on desktop/web it's supplementary to WASD/arrow keys).

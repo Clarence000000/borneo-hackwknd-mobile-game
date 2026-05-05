@@ -3,6 +3,7 @@ import 'package:flame/sprite.dart';
 import 'package:flutter/services.dart';
 
 import 'package:farm_fintech/engine/richi_farm_game.dart';
+import 'package:farm_fintech/engine/components/building_component.dart';
 
 /// Character animation states (idle + walk × 4 directions).
 enum PlayerState {
@@ -163,6 +164,68 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
       position.y = position.y.clamp(0, mapHeight);
     }
 
+    // Proximity detection for crops and buildings
+    _updateInteractables();
+
     super.update(dt);
+  }
+
+  void _updateInteractables() {
+    final grid = game.gameState.grid;
+    final mapCol = (position.x / 16).floor();
+    final mapRow = (position.y / 16).floor();
+    
+    // 1. Check building proximity
+    BuildingComponent? closestBuilding;
+    double minBldgDistSq = double.infinity;
+    // Buildings are usually large, check distance to bounding box center or just edges.
+    for (final building in game.buildings) {
+      // Find center of building
+      final bx = building.position.x + building.size.x / 2;
+      final by = building.position.y + building.size.y / 2;
+      final dx = position.x - bx;
+      final dy = position.y - by;
+      final distSq = dx * dx + dy * dy;
+      
+      // Interaction radius for buildings: slightly larger (e.g. 48 pixels ~ 3 tiles from center)
+      if (distSq < 48 * 48 && distSq < minBldgDistSq) {
+        minBldgDistSq = distSq;
+        closestBuilding = building;
+      }
+    }
+    game.gameState.updateInteractableBuilding(closestBuilding);
+
+    // If near a building, we probably don't want to interact with a tile.
+    if (closestBuilding != null) {
+      game.gameState.updateInteractableTile(null);
+      return;
+    }
+
+    // 2. Check crop proximity
+    (int, int)? closestTile;
+    double minDistanceSq = double.infinity;
+    // Search radius: 2 tiles
+    for (int r = mapRow - 2; r <= mapRow + 2; r++) {
+      for (int c = mapCol - 2; c <= mapCol + 2; c++) {
+        if (r >= 0 && r < grid.length && c >= 0 && c < grid[0].length) {
+          final tile = grid[r][c];
+          if (tile.isFarmland) {
+            final tileX = c * 16.0 + 8.0;
+            final tileY = r * 16.0 + 8.0;
+            final dx = position.x - tileX;
+            final dy = position.y - tileY;
+            final distSq = dx * dx + dy * dy;
+            
+            // Interaction radius: 24 pixels (1.5 tiles)
+            if (distSq < 24 * 24 && distSq < minDistanceSq) {
+              minDistanceSq = distSq;
+              closestTile = (c, r);
+            }
+          }
+        }
+      }
+    }
+    
+    game.gameState.updateInteractableTile(closestTile);
   }
 }
