@@ -7,16 +7,18 @@ import 'package:farm_fintech/config/constants.dart';
 import 'package:farm_fintech/engine/richi_farm_game.dart';
 import 'package:farm_fintech/models/player.dart';
 import 'package:farm_fintech/models/tile.dart';
-import 'package:farm_fintech/models/weather_event.dart';
-import 'package:farm_fintech/models/financial/bnpl_plan.dart';
+import 'package:farm_fintech/models/quest.dart';
+import 'package:farm_fintech/models/financial/transaction.dart';
 import 'package:farm_fintech/models/financial/loan.dart';
 import 'package:farm_fintech/models/financial/insurance.dart';
+import 'package:farm_fintech/models/financial/bnpl_plan.dart';
+import 'package:farm_fintech/models/weather_event.dart';
 import 'package:farm_fintech/services/cloud_functions_service.dart';
 import 'package:farm_fintech/services/firestore_service.dart';
 import 'package:farm_fintech/services/weather_service.dart';
 import 'package:farm_fintech/engine/components/building_component.dart';
 
-enum InteractionMenuState { main, plant, harvest, confirmRemove }
+enum InteractionMenuState { main, plant, harvest, confirmRemove, lyra }
 
 /// Central game state managed via [ChangeNotifier].
 class GameState extends ChangeNotifier {
@@ -83,7 +85,11 @@ class GameState extends ChangeNotifier {
   // ── Interaction ───────────────────────────────────────────────
   (int, int)? interactableTile;
   BuildingComponent? interactableBuilding;
+  bool isNearLyra = false;
   InteractionMenuState interactionMenuState = InteractionMenuState.main;
+  List<Map<String, String>> chatHistory = [];
+
+  Quest? activeQuest;
 
   void updateInteractableTile((int, int)? tile) {
     if (interactableTile?.$1 == tile?.$1 && interactableTile?.$2 == tile?.$2) return;
@@ -96,6 +102,18 @@ class GameState extends ChangeNotifier {
     if (interactableBuilding == building) return;
     interactableBuilding = building;
     interactionMenuState = InteractionMenuState.main;
+    notifyListeners();
+  }
+
+  void updateNearLyra(bool near) {
+    if (isNearLyra == near) return;
+    isNearLyra = near;
+    if (!near) interactionMenuState = InteractionMenuState.main;
+    notifyListeners();
+  }
+
+  void addChatMessage(String role, String content) {
+    chatHistory.add({'role': role, 'content': content});
     notifyListeners();
   }
 
@@ -130,6 +148,23 @@ class GameState extends ChangeNotifier {
     if (interactableBuilding != null) {
       if (key == 1 && interactionMenuState == InteractionMenuState.main) {
         game?.onBuildingTapped?.call(interactableBuilding!.buildingType);
+      }
+      return;
+    }
+
+    if (isNearLyra) {
+      if (interactionMenuState == InteractionMenuState.main) {
+        if (key == 1) { // 'F' key mapping
+          setInteractionMenuState(InteractionMenuState.lyra);
+        }
+      } else if (interactionMenuState == InteractionMenuState.lyra) {
+        if (key == 1) {
+          game?.onLyraTapped?.call();
+          setInteractionMenuState(InteractionMenuState.main);
+        } else if (key == 2) {
+          game?.onLyraQuestTapped?.call();
+          setInteractionMenuState(InteractionMenuState.main);
+        }
       }
       return;
     }
@@ -228,6 +263,57 @@ class GameState extends ChangeNotifier {
 
   bool _isCameraFollow = false;
   bool get isCameraFollow => _isCameraFollow;
+
+  void updateQuestProgress(QuestType type, double amount, {CropType? crop}) {
+    if (activeQuest == null || activeQuest!.status != QuestStatus.active) return;
+    if (activeQuest!.type != type) return;
+    if (type == QuestType.harvest && activeQuest!.targetCrop != crop) return;
+
+    activeQuest!.currentProgress += amount;
+    if (activeQuest!.currentProgress >= activeQuest!.goalAmount) {
+      // Completed! We don't auto-complete here, maybe wait for Lyra visit or just auto-reward
+    }
+    notifyListeners();
+    _savePlayerState();
+  }
+
+  Future<bool> acceptQuest(Quest quest) async {
+    if (player == null || activeQuest != null) return false;
+    if (player!.cashBalance < quest.cost) return false;
+
+    player!.cashBalance -= quest.cost;
+    activeQuest = quest;
+    notifyListeners();
+    await _savePlayerState();
+    return true;
+  }
+
+  Future<void> checkQuestStatus() async {
+    if (activeQuest == null || activeQuest!.status != QuestStatus.active) return;
+
+    if (activeQuest!.currentProgress >= activeQuest!.goalAmount) {
+      activeQuest!.status = QuestStatus.completed;
+      player!.cashBalance += activeQuest!.reward;
+      // Log transaction
+      await FirestoreService().addTransaction(player!.uid, Transaction(
+        id: '',
+        paymentType: TransactionType.cash,
+        amount: activeQuest!.reward,
+        category: TransactionCategory.other,
+        timestamp: DateTime.now(),
+        description: 'Quest Reward: ${activeQuest!.title}',
+      ));
+    } else if (currentDay > activeQuest!.endDay) {
+      activeQuest!.status = QuestStatus.failed;
+    }
+    
+    if (activeQuest!.status != QuestStatus.active) {
+      // Keep it for a bit to show user? Or just clear?
+      // Let's clear it when they talk to Lyra next or after some time.
+    }
+    notifyListeners();
+    await _savePlayerState();
+  }
   void toggleCameraFollow() {
     _isCameraFollow = !_isCameraFollow;
     notifyListeners();
@@ -673,6 +759,7 @@ class GameState extends ChangeNotifier {
       await _saveGridState();
       // Remove crop sprite from the map
       game?.removeCropComponent(col, row);
+      updateQuestProgress(QuestType.harvest, 1.0, crop: harvested);
       notifyListeners();
       return harvested;
     } catch (_) {
@@ -725,6 +812,7 @@ class GameState extends ChangeNotifier {
 
     try {
       await _savePlayerState();
+      updateQuestProgress(QuestType.cash, revenue);
       notifyListeners();
       return revenue;
     } catch (_) {
@@ -843,6 +931,22 @@ class GameState extends ChangeNotifier {
     }
   }
 
+  Future<bool> updateDisplayName(String newName) async {
+    if (player == null || newName.trim().isEmpty) return false;
+
+    final previous = player!.displayName;
+    player!.displayName = newName.trim();
+
+    try {
+      await _savePlayerState();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      player!.displayName = previous;
+      return false;
+    }
+  }
+
   int _applyAutoHarvest() {
     if (!tractorOwned || !autoHarvestEnabled || player == null) return 0;
 
@@ -887,7 +991,9 @@ class GameState extends ChangeNotifier {
       return false;
     }
 
-    return _advanceDayCore(isManual: true);
+    await _advanceDayCore(isManual: true);
+    await checkQuestStatus();
+    return true;
   }
 
   Future<bool> _advanceDayCore({required bool isManual}) async {

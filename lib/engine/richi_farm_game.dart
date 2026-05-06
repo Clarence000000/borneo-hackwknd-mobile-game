@@ -14,6 +14,7 @@ import 'package:farm_fintech/engine/components/weather_effect_component.dart';
 import 'package:farm_fintech/engine/components/night_overlay_component.dart';
 import 'package:farm_fintech/engine/components/player_component.dart';
 import 'package:farm_fintech/engine/components/interaction_keyboard_handler.dart';
+import 'package:farm_fintech/engine/components/lyra_npc_component.dart';
 import 'package:farm_fintech/engine/crop_image_registry.dart';
 import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/models/weather_event.dart';
@@ -53,6 +54,14 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
 
   /// Callback when a building is tapped — set by GameScreen for navigation.
   void Function(BuildingType type)? onBuildingTapped;
+
+  /// Callback when Lyra the Oracle is tapped — set by GameScreen to show dialog.
+  VoidCallback? onLyraTapped;
+  VoidCallback? onLyraQuestTapped;
+
+  /// Lyra NPC component reference.
+  LyraNpcComponent? _lyraNpc;
+  LyraNpcComponent? get lyraNpc => _lyraNpc;
 
 
   RichiFarmGame({required this.gameState});
@@ -142,6 +151,11 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     );
     _buildings.add(merchant);
     world.add(merchant);
+
+    // ── Lyra the Oracle NPC ────────────────────────────────────
+    // Place her to the right of the merchant building
+    _lyraNpc = LyraNpcComponent(gridCol: 12, gridRow: 3);
+    world.add(_lyraNpc!);
 
     // Set up camera.
     _setupCamera();
@@ -256,6 +270,13 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
 
     final worldX = camX + (screenPos.dx - screenCenterX) / zoom;
     final worldY = camY + (screenPos.dy - screenCenterY) / zoom;
+
+    // Check if tap hit Lyra the Oracle.
+    if (_lyraNpc != null && _lyraNpc!.containsWorldPoint(worldX, worldY)) {
+      developer.log('Tap → Lyra the Oracle', name: 'RichiFarmGame');
+      onLyraTapped?.call();
+      return;
+    }
 
     // Check if tap hit a building first.
     for (final building in _buildings) {

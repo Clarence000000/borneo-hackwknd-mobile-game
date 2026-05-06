@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -21,6 +22,20 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   Future<List<Transaction>>? _transactionsFuture;
   String? _transactionsUid;
+  bool _isEditingName = false;
+  late TextEditingController _nameController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
 
   Future<List<Transaction>> _fetchTransactions(String uid) async {
     final docs = await FirestoreService()
@@ -57,20 +72,72 @@ class _ProfileScreenState extends State<ProfileScreen> {
           // ── Page 1: Farmer Identity & Cash ────────────────
           Column(
             children: [
-              const CircleAvatar(
+              CircleAvatar(
                 radius: 45,
-                backgroundColor: Color(0xFF5D4037),
-                child: Icon(Icons.person, size: 55, color: Color(0xFFF4E4BC)),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                player.displayName,
-                style: GoogleFonts.cinzel(
-                  color: textColor,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
+                backgroundColor: const Color(0xFFD4C4A8),
+                child: ClipOval(
+                  child: FutureBuilder<ui.Image>(
+                    future: _loadCatAsset(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData) {
+                        return CustomPaint(
+                          size: const Size(90, 90),
+                          painter: _StaticSpritePainter(image: snapshot.data!, frameSizePx: 32),
+                        );
+                      }
+                      return const Icon(Icons.person, size: 55, color: Color(0xFF5D4037));
+                    },
+                  ),
                 ),
               ),
+              const SizedBox(height: 16),
+              if (_isEditingName == true)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 40),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _nameController,
+                          autofocus: true,
+                          style: GoogleFonts.cinzel(color: textColor, fontWeight: FontWeight.w900),
+                          decoration: const InputDecoration(isDense: true),
+                          onSubmitted: (val) => _saveName(state),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.check, color: Colors.green),
+                        onPressed: () => _saveName(state),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        onPressed: () => setState(() => _isEditingName = false),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                InkWell(
+                  onTap: () {
+                    _nameController.text = player.displayName;
+                    setState(() => _isEditingName = true);
+                  },
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        player.displayName,
+                        style: GoogleFonts.cinzel(
+                          color: textColor,
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.edit, size: 18, color: Color(0xFFC5A021)),
+                    ],
+                  ),
+                ),
               Text(
                 '${player.country} Citizen',
                 style: GoogleFonts.almendra(
@@ -271,7 +338,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
       },
     );
   }
+
+  Future<void> _saveName(GameState state) async {
+    final success = await state.updateDisplayName(_nameController.text);
+    if (mounted) {
+      if (success) {
+        setState(() => _isEditingName = false);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to update name')),
+        );
+      }
+    }
+  }
+
+  Future<ui.Image> _loadCatAsset() async {
+    final data = await DefaultAssetBundle.of(context).load('assets/images/cat_walk.png');
+    final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+    final frame = await codec.getNextFrame();
+    return frame.image;
+  }
 }
+
+class _StaticSpritePainter extends CustomPainter {
+  final ui.Image image;
+  final int frameSizePx;
+  const _StaticSpritePainter({required this.image, required this.frameSizePx});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final src = Rect.fromLTWH(0, 0, frameSizePx.toDouble(), frameSizePx.toDouble());
+    final dst = Rect.fromLTWH(0, 0, size.width, size.height);
+    canvas.drawImageRect(image, src, dst, Paint()..filterQuality = ui.FilterQuality.none);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 
 class _StatRow extends StatelessWidget {
   final String label;

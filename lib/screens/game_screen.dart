@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'package:farm_fintech/config/constants.dart';
@@ -19,6 +20,8 @@ import 'package:farm_fintech/utils/currency_util.dart';
 import 'package:farm_fintech/services/seed_service.dart';
 import 'package:farm_fintech/screens/bank_screen.dart';
 import 'package:farm_fintech/screens/merchant_screen.dart';
+import 'package:farm_fintech/widgets/lyra_dialog_box.dart';
+import 'package:farm_fintech/services/gemini_service.dart';
 
 /// Main game screen — landscape farm view powered by Flame engine.
 ///
@@ -37,10 +40,21 @@ class _GameScreenState extends State<GameScreen> {
   bool _wasLoanSharkThreatActive = false;
   Timer? _threatHapticTimer;
 
+  // ── Lyra Oracle dialog state ─────────────────────────────────
+  bool _lyraDialogOpen = false;
+  String _lyraMode = 'chat'; // 'chat' or 'quest'
+  late final FocusNode _gameFocusNode;
+  bool _lyraDangerous = false;
+  int _lyraTrustScore = 75;
+  String _lyraWarning = '';
+  Timer? _lyraAnalysisTimer;
+  final GeminiService _lyraGemini = GeminiService();
+  String? _lastLyraKey;
+
   @override
   void initState() {
     super.initState();
-
+    _gameFocusNode = FocusNode();
     final state = context.read<GameState>();
     _game = RichiFarmGame(gameState: state);
     state.game = _game; // Wire up so GameState can sync crop sprites
@@ -63,13 +77,61 @@ class _GameScreenState extends State<GameScreen> {
       );
     };
 
+    // Lyra: show dialog when tapped on the map
+    _game.onLyraTapped = () {
+      if (!mounted || _lyraDialogOpen) return;
+      setState(() {
+        _lyraDialogOpen = true;
+        _lyraMode = 'chat';
+      });
+    };
+
+    _game.onLyraQuestTapped = () {
+      if (!mounted || _lyraDialogOpen) return;
+      setState(() {
+        _lyraDialogOpen = true;
+        _lyraMode = 'quest';
+      });
+    };
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!(state.player?.tutorialCompleted ?? true)) {
         _showTutorial(state);
       }
-
-      // Auto-seed leaderboard once in background if needed
       SeedService.seedLeaderboard();
+      // Start periodic danger analysis (5s delay for state load)
+      Future.delayed(const Duration(seconds: 5), _startLyraAnalysis);
+    });
+  }
+
+  void _startLyraAnalysis() {
+    if (!mounted) return;
+    _runLyraAnalysis();
+    _lyraAnalysisTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) _runLyraAnalysis();
+    });
+  }
+
+  Future<void> _runLyraAnalysis() async {
+    final state = context.read<GameState>();
+    final player = state.player;
+    if (player == null) return;
+    final key = '${player.cashBalance.toInt()}_${player.creditScore}_'
+        '${state.bnplPlans.length}_${state.loans.length}_${state.activeDisaster}';
+    if (key == _lastLyraKey) return;
+    _lastLyraKey = key;
+    final result = await _lyraGemini.analyzeFinancialDanger(
+      player: player,
+      activeBnplCount: state.bnplPlans.length,
+      activeLoanCount: state.loans.length,
+      currentDay: state.currentDay,
+      activeDisaster: state.activeDisaster.toString(),
+    );
+    if (!mounted) return;
+    setState(() {
+      _lyraDangerous = result.isDangerous;
+      _lyraTrustScore = result.trustScore;
+      _lyraWarning = result.warningMessage;
     });
   }
 
@@ -99,6 +161,8 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void dispose() {
     _threatHapticTimer?.cancel();
+    _lyraAnalysisTimer?.cancel();
+    _gameFocusNode.dispose();
     super.dispose();
   }
 
@@ -138,14 +202,17 @@ class _GameScreenState extends State<GameScreen> {
                 onTapUp: (details) {
                   _game.handleTap(details.localPosition);
                 },
-                child: GameWidget(game: _game),
+                child: GameWidget(
+                  game: _game,
+                  focusNode: _gameFocusNode,
+                ),
               ),
 
               // ── Layer 1: HUD Overlay ────────────────────────
               const HudOverlay(),
 
               // ── Layer 2: Loan Shark Threat Tint ─────────────
-              if (state.loanSharkThreatActive)
+              if (state.loanSharkThreatActive == true)
                 IgnorePointer(
                   child: TweenAnimationBuilder<double>(
                     tween: Tween(begin: 0.10, end: 0.18),
@@ -162,7 +229,30 @@ class _GameScreenState extends State<GameScreen> {
               if (state.selectedTile != null) _buildTileActionBar(state),
 
               // ── Layer 4: Interaction Overlay ────────────────
-              InteractionOverlay(game: _game),
+              if (!_lyraDialogOpen) InteractionOverlay(game: _game),
+
+              // ── Layer 5: Lyra danger badge (bottom-left corner) ──
+              if (_lyraDangerous == true && _lyraDialogOpen == false)
+                Positioned(
+                  bottom: 20,
+                  left: 20,
+                  child: _LyraDangerBadge(
+                    onTap: () => setState(() => _lyraDialogOpen = true),
+                  ),
+                ),
+
+              // ── Layer 6: Lyra VN dialog box ───────────────────
+              if (_lyraDialogOpen == true)
+                LyraDialogBox(
+                  initialTrustScore: _lyraTrustScore,
+                  initialWarning: _lyraWarning,
+                  isDangerous: _lyraDangerous,
+                  initialMode: _lyraMode,
+                  onClose: () {
+                    setState(() => _lyraDialogOpen = false);
+                    _gameFocusNode.requestFocus();
+                  },
+                ),
             ],
           );
         },
@@ -405,6 +495,84 @@ class _GameScreenState extends State<GameScreen> {
           SnackBar(content: Text('Stored $cropName in inventory.')),
         );
       },
+    );
+  }
+}
+
+/// Pulsing danger badge shown at bottom-left when Lyra detects financial peril.
+/// Hints the player to go tap Lyra on the map and speak with her.
+class _LyraDangerBadge extends StatefulWidget {
+  final VoidCallback onTap;
+  const _LyraDangerBadge({required this.onTap});
+
+  @override
+  State<_LyraDangerBadge> createState() => _LyraDangerBadgeState();
+}
+
+class _LyraDangerBadgeState extends State<_LyraDangerBadge>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    )..repeat(reverse: true);
+    _pulse = Tween<double>(begin: 0.9, end: 1.2).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: AnimatedBuilder(
+        animation: _pulse,
+        builder: (_, child) => Transform.scale(
+          scale: _pulse.value,
+          child: child,
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A0D2E),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFFF3D00), width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFF3D00).withValues(alpha: 0.6),
+                blurRadius: 12,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('⚠', style: TextStyle(fontSize: 14)),
+              const SizedBox(width: 6),
+              Text(
+                'Lyra warns you!',
+                style: GoogleFonts.cinzel(
+                  color: const Color(0xFFFF6B35),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
