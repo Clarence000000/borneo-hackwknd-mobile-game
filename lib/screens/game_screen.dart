@@ -47,7 +47,6 @@ class _GameScreenState extends State<GameScreen> {
   bool _lyraDangerous = false;
   int _lyraTrustScore = 75;
   String _lyraWarning = '';
-  Timer? _lyraAnalysisTimer;
   final GeminiService _lyraGemini = GeminiService();
   String? _lastLyraKey;
 
@@ -99,18 +98,9 @@ class _GameScreenState extends State<GameScreen> {
         _showTutorial(state);
       }
       SeedService.seedLeaderboard();
-      // Start periodic danger analysis (5s delay for state load)
-      Future.delayed(const Duration(seconds: 5), _startLyraAnalysis);
     });
   }
 
-  void _startLyraAnalysis() {
-    if (!mounted) return;
-    _runLyraAnalysis();
-    _lyraAnalysisTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) _runLyraAnalysis();
-    });
-  }
 
   Future<void> _runLyraAnalysis() async {
     final state = context.read<GameState>();
@@ -161,7 +151,6 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void dispose() {
     _threatHapticTimer?.cancel();
-    _lyraAnalysisTimer?.cancel();
     _gameFocusNode.dispose();
     super.dispose();
   }
