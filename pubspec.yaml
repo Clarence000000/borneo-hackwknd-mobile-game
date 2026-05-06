@@ -44,6 +44,9 @@ dependencies:
   intl: ^0.20.2
   flame: ^1.37.0
   flame_tiled: ^3.1.1
+
+  flame_audio: ^2.12.1
+
   google_fonts: ^8.1.0
 
 dev_dependencies:
@@ -74,6 +77,7 @@ flutter:
     - assets/images/
     - assets/images/crops/
     - assets/tiles/
+    - assets/audio/
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see

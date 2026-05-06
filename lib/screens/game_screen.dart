@@ -108,6 +108,27 @@ class _GameScreenState extends State<GameScreen> {
       backgroundColor: GameColors.uiBackground,
       body: Consumer<GameState>(
         builder: (context, state, _) {
+          if (state.isLoading) {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: GameColors.uiGold),
+                  SizedBox(height: 24),
+                  Text(
+                    'Loading Farm Data...',
+                    style: TextStyle(
+                      color: GameColors.uiText,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
           _scheduleMonthlyReportDialog(state);
           _handleLoanSharkThreatEffects(state);
           return Stack(

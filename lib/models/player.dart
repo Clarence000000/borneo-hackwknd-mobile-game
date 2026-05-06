@@ -28,6 +28,7 @@ class Player {
 
   // Game Day Persistence
   int currentDay;
+  int remainingCycleSeconds; // Intra-day time progress (counts down from max)
   int manualNextDayUsedToday;
   DateTime manualNextDayUsageDate;
 
@@ -50,6 +51,7 @@ class Player {
     this.fertilizerPackCount = 0,
     Map<String, int>? inventory,
     this.currentDay = 1,
+    this.remainingCycleSeconds = 20 * 60, // Default: kGameDayDurationMinutes * 60
     this.manualNextDayUsedToday = 0,
     DateTime? manualNextDayUsageDate,
   }) : inventory = Map<String, int>.from(inventory ?? {}),
@@ -107,6 +109,7 @@ class Player {
     'fertilizerPackCount': fertilizerPackCount,
     'inventory': inventory,
     'currentDay': currentDay,
+    'remainingCycleSeconds': remainingCycleSeconds,
     'manualNextDayUsedToday': manualNextDayUsedToday,
     'manualNextDayUsageDate': manualNextDayUsageDate.millisecondsSinceEpoch,
   };
@@ -136,6 +139,7 @@ class Player {
         ) ??
         {},
     currentDay: (map['currentDay'] as int?) ?? 1,
+    remainingCycleSeconds: (map['remainingCycleSeconds'] as int?) ?? (20 * 60),
     manualNextDayUsedToday: (map['manualNextDayUsedToday'] as int?) ?? 0,
     manualNextDayUsageDate: map['manualNextDayUsageDate'] != null
         ? DateTime.fromMillisecondsSinceEpoch(map['manualNextDayUsageDate'] as int)

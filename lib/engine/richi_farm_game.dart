@@ -10,10 +10,13 @@ import 'package:farm_fintech/config/constants.dart';
 import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/engine/components/building_component.dart';
 import 'package:farm_fintech/engine/components/crop_component.dart';
+import 'package:farm_fintech/engine/components/weather_effect_component.dart';
+import 'package:farm_fintech/engine/components/night_overlay_component.dart';
 import 'package:farm_fintech/engine/components/player_component.dart';
 import 'package:farm_fintech/engine/components/interaction_keyboard_handler.dart';
 import 'package:farm_fintech/engine/crop_image_registry.dart';
 import 'package:farm_fintech/providers/game_state.dart';
+import 'package:farm_fintech/models/weather_event.dart';
 
 /// Main Flame game class — renders the Tiled map with crops and player.
 ///
@@ -40,12 +43,17 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
   /// Joystick.
   JoystickComponent? joystick;
 
+
+  /// Weather visual effects overlay.
+  late WeatherEffectComponent _weatherEffect;
+
   /// Buildings on the map.
   final List<BuildingComponent> _buildings = [];
   List<BuildingComponent> get buildings => _buildings;
 
   /// Callback when a building is tapped — set by GameScreen for navigation.
   void Function(BuildingType type)? onBuildingTapped;
+
 
   RichiFarmGame({required this.gameState});
 
@@ -105,6 +113,15 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     );
     camera.viewport.add(joystick!);
 
+
+    // Weather effect overlay (renders behind joystick).
+    _weatherEffect = WeatherEffectComponent();
+    camera.viewport.add(_weatherEffect);
+
+    // Night overlay effect
+    final nightOverlay = NightOverlayComponent();
+    camera.viewport.add(nightOverlay);
+
     // ── Buildings ──────────────────────────────────────────
     // Bank: ~3×4 tiles, placed near top-left
     final bank = BuildingComponent(
@@ -128,6 +145,17 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
 
     // Set up camera.
     _setupCamera();
+
+    // Sync weather visuals if a disaster was already active.
+    _weatherEffect.setWeather(gameState.activeDisaster);
+  }
+
+  // ── Weather visuals ────────────────────────────────────────
+
+  /// Update the weather visual overlay. Called by [GameState] when
+  /// a disaster is triggered or cleared.
+  void updateWeatherVisuals(DisasterType type) {
+    _weatherEffect.setWeather(type);
   }
 
   @override
