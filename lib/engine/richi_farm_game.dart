@@ -14,6 +14,7 @@ import 'package:farm_fintech/engine/components/weather_effect_component.dart';
 import 'package:farm_fintech/engine/components/night_overlay_component.dart';
 import 'package:farm_fintech/engine/components/player_component.dart';
 import 'package:farm_fintech/engine/components/interaction_keyboard_handler.dart';
+import 'package:farm_fintech/engine/components/shady_lender_component.dart';
 import 'package:farm_fintech/engine/crop_image_registry.dart';
 import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/models/weather_event.dart';
@@ -50,6 +51,9 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
   final List<BuildingComponent> _buildings = [];
   List<BuildingComponent> get buildings => _buildings;
 
+  /// The Shady Lender character on the map.
+  ShadyLenderComponent? shadyLender;
+
   /// Callback when a building is tapped — set by GameScreen for navigation.
   void Function(BuildingType type)? onBuildingTapped;
 
@@ -81,6 +85,25 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
         gameState.markFarmableFromTiled(_mapComponent!.tileMap.map);
       } catch (e) {
         developer.log('markFarmableFromTiled error: $e', name: 'RichiFarmGame');
+      }
+
+      // Parse ShadyLender from Tiled object layers
+      final mapComp = _mapComponent;
+      if (mapComp != null) {
+        for (final layer in mapComp.tileMap.map.layers) {
+          if (layer is ObjectGroup) {
+            for (final obj in layer.objects) {
+              if (obj.name == 'ShadyLender') {
+                final lender = ShadyLenderComponent(
+                  position: Vector2(obj.x, obj.y),
+                  size: Vector2(obj.width, obj.height),
+                );
+                shadyLender = lender;
+                world.add(lender);
+              }
+            }
+          }
+        }
       }
 
       // Pre-cache crop sprites.

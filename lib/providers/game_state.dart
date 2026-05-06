@@ -15,6 +15,7 @@ import 'package:farm_fintech/services/cloud_functions_service.dart';
 import 'package:farm_fintech/services/firestore_service.dart';
 import 'package:farm_fintech/services/weather_service.dart';
 import 'package:farm_fintech/engine/components/building_component.dart';
+import 'package:farm_fintech/engine/components/shady_lender_component.dart';
 
 enum InteractionMenuState { main, plant, harvest, confirmRemove }
 
@@ -83,6 +84,7 @@ class GameState extends ChangeNotifier {
   // ── Interaction ───────────────────────────────────────────────
   (int, int)? interactableTile;
   BuildingComponent? interactableBuilding;
+  ShadyLenderComponent? interactableShadyLender;
   InteractionMenuState interactionMenuState = InteractionMenuState.main;
 
   void updateInteractableTile((int, int)? tile) {
@@ -96,6 +98,12 @@ class GameState extends ChangeNotifier {
     if (interactableBuilding == building) return;
     interactableBuilding = building;
     interactionMenuState = InteractionMenuState.main;
+    notifyListeners();
+  }
+
+  void updateInteractableShadyLender(ShadyLenderComponent? lender) {
+    if (interactableShadyLender == lender) return;
+    interactableShadyLender = lender;
     notifyListeners();
   }
 
@@ -237,6 +245,7 @@ class GameState extends ChangeNotifier {
     selectedTile = null;
     interactableTile = null;
     interactableBuilding = null;
+    interactableShadyLender = null;
     interactionMenuState = InteractionMenuState.main;
     selectedCropToPlant = null;
     activeDisaster = DisasterType.none;

@@ -138,7 +138,68 @@ class _GameScreenState extends State<GameScreen> {
                 onTapUp: (details) {
                   _game.handleTap(details.localPosition);
                 },
-                child: GameWidget(game: _game),
+                child: GameWidget(
+                  game: _game,
+                  overlayBuilderMap: {
+                    'ShadyLenderMenu': (context, game) {
+                      return Center(
+                        child: Material(
+                          color: Colors.transparent,
+                          child: Container(
+                            width: 360,
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              color: GameColors.uiPanel.withValues(alpha: 0.95),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: GameColors.uiGold.withValues(alpha: 0.6),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.6),
+                                  blurRadius: 24,
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  '🦈 Shady Lender',
+                                  style: TextStyle(
+                                    color: GameColors.uiGold,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'Need quick cash? I can help...\nbut it\'ll cost you.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: GameColors.uiText,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: GameColors.uiGold,
+                                    foregroundColor: GameColors.uiBackground,
+                                  ),
+                                  onPressed: () {
+                                    _game.overlays.remove('ShadyLenderMenu');
+                                  },
+                                  child: const Text('Close'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  },
+                ),
               ),
 
               // ── Layer 1: HUD Overlay ────────────────────────

@@ -215,8 +215,23 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
     }
     game.gameState.updateInteractableBuilding(closestBuilding);
 
-    // If near a building, we probably don't want to interact with a tile.
-    if (closestBuilding != null) {
+    // 1b. Check ShadyLender proximity
+    final lender = game.shadyLender;
+    bool nearShadyLender = false;
+    if (lender != null) {
+      final lx = lender.position.x + lender.size.x / 2;
+      final ly = lender.position.y + lender.size.y / 2;
+      final dlx = position.x - lx;
+      final dly = position.y - ly;
+      final lenderDistSq = dlx * dlx + dly * dly;
+      if (lenderDistSq < 64 * 64) {
+        nearShadyLender = true;
+      }
+    }
+    game.gameState.updateInteractableShadyLender(nearShadyLender ? lender : null);
+
+    // If near a building or shady lender, we probably don't want to interact with a tile.
+    if (closestBuilding != null || nearShadyLender) {
       game.gameState.updateInteractableTile(null);
       return;
     }

@@ -20,14 +20,20 @@ class InteractionOverlay extends StatelessWidget {
 
     return Consumer<GameState>(
       builder: (context, state, child) {
-        if (state.interactableBuilding == null && state.interactableTile == null) {
+        if (state.interactableBuilding == null && state.interactableTile == null && state.interactableShadyLender == null) {
           return const SizedBox.shrink();
         }
 
         List<Widget> options = [];
         Vector2 worldPos;
 
-        if (state.interactableBuilding != null) {
+        if (state.interactableShadyLender != null) {
+          final lender = state.interactableShadyLender!;
+          options.add(_buildOption('F', 'Shady Lender', () {
+            game.overlays.add('ShadyLenderMenu');
+          }));
+          worldPos = Vector2(lender.position.x + lender.size.x, lender.position.y + lender.size.y / 2);
+        } else if (state.interactableBuilding != null) {
           final building = state.interactableBuilding!;
           if (building.buildingType == BuildingType.bank) {
             options.add(_buildOption('F', 'Bank', () => game.onBuildingTapped?.call(building.buildingType)));
