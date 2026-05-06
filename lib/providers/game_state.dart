@@ -197,6 +197,60 @@ class GameState extends ChangeNotifier {
     // loading the currentDay from Firestore to avoid race conditions.
   }
 
+  /// Fully resets all in-memory game state for a clean logout.
+  ///
+  /// Must be called BEFORE navigating to the login screen so the
+  /// next user doesn't inherit a stale UID, timers, or subscriptions.
+  void resetForLogout() {
+    // Stop all timers
+    _dayCycleTimer?.cancel();
+    _dayCycleTimer = null;
+    _loanSharkThreatTimer?.cancel();
+    _loanSharkThreatTimer = null;
+    _lifecycleListener?.dispose();
+    _lifecycleListener = null;
+
+    // Cancel Firestore subscriptions
+    _bnplPlansSub?.cancel();
+    _bnplPlansSub = null;
+    _txSub?.cancel();
+    _txSub = null;
+
+    // Clear player and game reference
+    player = null;
+    game = null;
+
+    // Clear the Firestore service cache to prevent stale UID data
+    _firestore.clearCache();
+
+    // Reset grid to default empty state
+    _initGrid();
+
+    // Reset all session variables
+    currentDay = 1;
+    _remainingCycleSeconds = kGameDayDurationMinutes * 60;
+    _manualNextDayUsedToday = 0;
+    _manualNextDayUsageDate = DateTime.now();
+    _isAdvancingDay = false;
+    _timeSaveCountdown = 0;
+    _loanSharkThreatSecondsRemaining = 0;
+    selectedTile = null;
+    interactableTile = null;
+    interactableBuilding = null;
+    interactionMenuState = InteractionMenuState.main;
+    selectedCropToPlant = null;
+    activeDisaster = DisasterType.none;
+    bnplPlans = [];
+    loans = [];
+    insurances = [];
+    _monthlyIncome = 0;
+    _pendingMonthlyReport = null;
+    _monthlyExpenses.updateAll((key, value) => 0);
+    isLoading = true;
+
+    notifyListeners();
+  }
+
   int get remainingCycleSeconds => _remainingCycleSeconds;
   bool get isDaytime => _remainingCycleSeconds > (kGameNightMinutes * 60);
   String get dayPhaseLabel => isDaytime ? 'Day' : 'Night';
@@ -475,7 +529,10 @@ class GameState extends ChangeNotifier {
       // Resolves race condition where markFarmableFromTiled is overwritten.
       if (game?.isLoaded ?? false) {
         try {
-          markFarmableFromTiled(game!.mapComponent.tileMap.map);
+          final mapComp = game?.mapComponent;
+          if (mapComp != null) {
+            markFarmableFromTiled(mapComp.tileMap.map);
+          }
         } catch (_) {}
       }
       game?.syncCropsFromGameState();
@@ -483,7 +540,10 @@ class GameState extends ChangeNotifier {
       _initGrid(); // Fallback to default
       if (game?.isLoaded ?? false) {
         try {
-          markFarmableFromTiled(game!.mapComponent.tileMap.map);
+          final mapComp = game?.mapComponent;
+          if (mapComp != null) {
+            markFarmableFromTiled(mapComp.tileMap.map);
+          }
         } catch (_) {}
       }
       await _saveGridState(); // Save the default grid
@@ -780,6 +840,54 @@ class GameState extends ChangeNotifier {
       player!.tractorOwned = previousTractorOwned;
       player!.autoHarvestEnabled = previousAutoHarvestEnabled;
       player!.fertilizerPackCount = previousFertilizerPackCount;
+      return false;
+    }
+  }
+
+  /// Purchase an item using BNPL (Buy Now, Pay Later).
+  ///
+  /// Creates a BNPL plan with the given number of installments and
+  /// immediately unlocks the equipment without upfront payment.
+  Future<bool> purchaseWithBnpl(
+    String itemName,
+    double totalAmount,
+    int installments,
+  ) async {
+    if (player == null) return false;
+
+    final plan = BnplPlan(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      itemName: itemName,
+      totalAmount: totalAmount,
+      installments: installments,
+      monthlyAmount: totalAmount / installments,
+      nextDueDate: DateTime.now().add(const Duration(days: kGameDaysPerMonth)),
+      nextDueDay: currentDay + kGameDaysPerMonth,
+    );
+
+    try {
+      // Write the BNPL plan to Firestore.
+      // The realtime stream listener will automatically pick it up
+      // and refresh bnplPlans in memory.
+      await _firestore.createBnplPlan(player!.uid, plan);
+
+      // Unlock the equipment immediately (the player pays over time).
+      await unlockEquipment(itemName);
+
+      _addMonthlyExpense('equipment', 0); // No upfront cost
+
+      // Log a transaction for credit score tracking
+      await _firestore.logTransaction(
+        player!.uid,
+        amount: totalAmount,
+        paymentType: 'bnpl',
+        category: 'bnplPurchase',
+      );
+
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('purchaseWithBnpl error: $e');
       return false;
     }
   }

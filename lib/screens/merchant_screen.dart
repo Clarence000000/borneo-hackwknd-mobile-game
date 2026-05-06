@@ -377,7 +377,46 @@ class _EquipmentCard extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => state.unlockEquipment(equipment.name), // Simplified for brevity
+                  onPressed: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: const Color(0xFFF4E4BC),
+                        title: Text('BNPL Purchase',
+                          style: GoogleFonts.cinzel(color: const Color(0xFF2D1B10), fontWeight: FontWeight.bold)),
+                        content: Text(
+                          '${equipment.name} — ${CurrencyUtil.format(equipment.price, player.country)}\n\n'
+                          'Pay in 3 installments of ${CurrencyUtil.format(equipment.price / 3, player.country)}/month.\n\n'
+                          'Miss a payment and you\'ll be charged late fees!',
+                          style: GoogleFonts.almendra(fontWeight: FontWeight.bold),
+                        ),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D4037)),
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('Confirm BNPL', style: TextStyle(color: Colors.white)),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm == true) {
+                      await FinancialAdvisor.warnBnpl(context, player, state.bnplPlans.length);
+                      final success = await state.purchaseWithBnpl(
+                        equipment.name,
+                        equipment.price,
+                        3, // 3 installments
+                      );
+                      if (success && context.mounted) {
+                        DialogPopup.show(
+                          context,
+                          title: '📦 BNPL Activated',
+                          message: '${equipment.name} unlocked! First payment due in ${kGameDaysPerMonth} game days.',
+                          icon: Icons.check_circle,
+                        );
+                      }
+                    }
+                  },
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Color(0xFF5D4037), width: 2),
                     padding: const EdgeInsets.symmetric(vertical: 12),

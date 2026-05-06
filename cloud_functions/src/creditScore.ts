@@ -1,9 +1,9 @@
-import * as functions from "firebase-functions";
-import { CallableRequest } from "firebase-functions/v2/https";
-import * as admin from "firebase-admin";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { initializeApp, getApps } from "firebase-admin/app";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
-if (!admin.apps.length) admin.initializeApp();
-const db = admin.firestore();
+if (!getApps().length) initializeApp();
+const db = getFirestore();
 
 function toMillis(value: any): number {
     if (!value) return 0;
@@ -26,10 +26,10 @@ function toMillis(value: any): number {
  * 3. Average Tx Amount     (20%) — Higher avg → more financial activity
  * 4. On-time Bill Payments (30%) — Loan/insurance payments made on time
  */
-export const calculateCreditScore = functions.https.onCall(
-    async (request: CallableRequest<any>) => {
+export const calculateCreditScore = onCall(
+    async (request) => {
         const uid = request.auth?.uid;
-        if (!uid) throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
+        if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");
 
         const userDoc = await db.collection("users").doc(uid).get();
         const previousScore = (userDoc.data()?.creditScore as number | undefined) ?? 400;
@@ -143,6 +143,6 @@ export const calculateCreditScore = functions.https.onCall(
 async function _updateScore(uid: string, score: number) {
     await db.collection("users").doc(uid).update({
         "creditScore": score,
-        "creditScoreUpdatedAt": admin.firestore.FieldValue.serverTimestamp(),
+        "creditScoreUpdatedAt": FieldValue.serverTimestamp(),
     });
 }

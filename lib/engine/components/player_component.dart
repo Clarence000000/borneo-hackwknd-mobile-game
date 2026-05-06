@@ -271,7 +271,9 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
     }
 
     try {
-      final map = game.mapComponent.tileMap.map;
+      final mapComp = game.mapComponent;
+      if (mapComp == null) return false;
+      final map = mapComp.tileMap.map;
       for (final layer in map.layers) {
         if (layer.name == 'Water' || layer.name == 'Hills') {
           final layerDyn = layer as dynamic;

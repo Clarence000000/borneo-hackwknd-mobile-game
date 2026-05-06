@@ -67,7 +67,9 @@ class InteractionOverlay extends StatelessWidget {
         }
 
         final screenPos = game.camera.viewfinder.localToGlobal(worldPos);
-        final playerScreenPos = game.camera.viewfinder.localToGlobal(game.playerComponent.position);
+        final playerComp = game.playerComponent;
+        if (playerComp == null) return const SizedBox.shrink();
+        final playerScreenPos = game.camera.viewfinder.localToGlobal(playerComp.position);
         
         // Decide whether to show box on the left or right of the tile
         // to avoid the player character.

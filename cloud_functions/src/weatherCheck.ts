@@ -1,13 +1,13 @@
-import * as functions from "firebase-functions";
-import { CallableRequest } from "firebase-functions/v2/https";
-import * as admin from "firebase-admin";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { initializeApp, getApps } from "firebase-admin/app";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import fetch from "node-fetch";
 
 // Load local environment variables (safe fallback since firebase emulators inject differently)
 require("dotenv").config({ path: "../.env.local" });
 
-if (!admin.apps.length) admin.initializeApp();
-const db = admin.firestore();
+if (!getApps().length) initializeApp();
+const db = getFirestore();
 
 // OpenWeather API config
 const OPENWEATHER_API_KEY = process.env.COOGLE_CLOUD_KEY || process.env.OPENWEATHER_API_KEY || "YOUR_API_KEY";
@@ -34,14 +34,14 @@ interface WeatherResponse {
  * 4. If severe → writes disaster event to Firestore
  * 5. Returns disaster status to client
  */
-export const weatherCheck = functions.https.onCall(
-    async (request: CallableRequest<any>) => {
+export const weatherCheck = onCall(
+    async (request) => {
         const uid = request.auth?.uid;
-        if (!uid) throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
+        if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");
 
         const { lat, lng } = request.data;
         if (typeof lat !== "number" || typeof lng !== "number") {
-            throw new functions.https.HttpsError("invalid-argument", "lat and lng required");
+            throw new HttpsError("invalid-argument", "lat and lng required");
         }
 
         try {
@@ -86,7 +86,7 @@ export const weatherCheck = functions.https.onCall(
                     severity,
                     cropsDestroyed: 0, // Client will update after processing
                     insurancePayout: 0, // Will be calculated by insurancePayout function
-                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    timestamp: FieldValue.serverTimestamp(),
                     weatherData: {
                         id: data.weather?.[0]?.id,
                         description: data.weather?.[0]?.description,

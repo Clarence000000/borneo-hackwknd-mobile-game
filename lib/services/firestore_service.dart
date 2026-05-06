@@ -17,6 +17,11 @@ class FirestoreService {
 
   FirebaseFirestore getDb() => _db;
 
+  /// Clear the cached player to prevent stale data on account switch.
+  void clearCache() {
+    _cachedPlayer = null;
+  }
+
   /// Creates a new player profile in Firestore after registration
   Future<void> createPlayer(Player player) async {
     AdminAccountService.applyAdminPrivileges(player);
