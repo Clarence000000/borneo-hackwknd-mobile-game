@@ -518,6 +518,67 @@ class GameState extends ChangeNotifier {
     }
   }
 
+  /// Total outstanding debt across all active shark loans.
+  double get sharkDebt {
+    double total = 0;
+    for (final loan in loans) {
+      if (loan.id.startsWith('shark-') && loan.status == LoanStatus.active) {
+        total += loan.remainingBalance;
+      }
+    }
+    return total;
+  }
+
+  /// Repay shark loans by a given amount. Returns the actual amount repaid.
+  Future<double> repaySharkLoan(double amount) async {
+    final p = player;
+    if (p == null || amount <= 0) return 0;
+
+    // Cap to what they can afford (prefer cash, then bank)
+    final affordable = p.cashBalance + p.bankBalance;
+    final toRepay = amount.clamp(0.0, affordable).clamp(0.0, sharkDebt);
+    if (toRepay <= 0) return 0;
+
+    double remaining = toRepay;
+
+    // Deduct from cash first, then bank
+    if (p.cashBalance >= remaining) {
+      p.pay(remaining, method: PaymentMethod.cash);
+    } else {
+      final fromCash = p.cashBalance;
+      if (fromCash > 0) p.pay(fromCash, method: PaymentMethod.cash);
+      final fromBank = remaining - fromCash;
+      if (fromBank > 0) p.pay(fromBank, method: PaymentMethod.bank);
+    }
+
+    // Apply repayment across active shark loans
+    for (final loan in loans) {
+      if (remaining <= 0) break;
+      if (!loan.id.startsWith('shark-') || loan.status != LoanStatus.active) continue;
+
+      final applied = remaining.clamp(0.0, loan.remainingBalance);
+      loan.remainingBalance -= applied;
+      remaining -= applied;
+
+      if (loan.remainingBalance <= 0.01) {
+        loan.remainingBalance = 0;
+        loan.status = LoanStatus.paid;
+      }
+    }
+
+    _addMonthlyExpense('interest', toRepay);
+
+    try {
+      await _savePlayerState();
+      await _saveGridState();
+    } catch (_) {
+      // Best-effort save
+    }
+
+    notifyListeners();
+    return toRepay;
+  }
+
   /// Set player and load their specific grid if it exists
   Future<void> setPlayer(Player newPlayer) async {
     isLoading = true;

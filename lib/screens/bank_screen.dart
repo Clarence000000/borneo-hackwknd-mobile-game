@@ -272,56 +272,10 @@ class _BankScreenState extends State<BankScreen> {
               ),
             ),
 
-          // ── Page 4: Shady Lender & Insurance ───────────
+          // ── Page 4: Crop Insurance ───────────
           if (player.bankRegistered)
             Column(
               children: [
-                _ActionCard(
-                  icon: Icons.warning_amber_rounded,
-                  title: 'Shady Lender',
-                  subtitle:
-                      'Instant cash, high limit, predatory terms. 35% monthly interest.',
-                  buttonText:
-                      'Take ${CurrencyUtil.format(1200, player.country)}',
-                  buttonColor: GameColors.uiRed,
-                  onPressed: () async {
-                    final confirm = await showDialog<bool>(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        title: const Text('High-Risk Illegal Loan'),
-                        content: const Text(
-                          'This is NOT a regulated bank product. Defaults trigger threat effects.',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(context).pop(false),
-                            child: const Text('Cancel'),
-                          ),
-                          ElevatedButton(
-                            onPressed: () => Navigator.of(context).pop(true),
-                            child: const Text('Take Risk'),
-                          ),
-                        ],
-                      ),
-                    );
-
-                    if (confirm != true || !context.mounted) return;
-
-                    final ok = await state.takeLoanSharkLoan(1200);
-                    if (!context.mounted) return;
-
-                    DialogPopup.show(
-                      context,
-                      title: ok ? '⚠️ Cash Received' : 'Loan Failed',
-                      message: ok
-                          ? 'You got ${CurrencyUtil.format(1200, player.country)} immediately. Repay soon!'
-                          : 'Unable to process.',
-                      icon: ok ? Icons.dangerous : Icons.error_outline,
-                      iconColor: ok ? GameColors.uiRed : GameColors.uiTextDim,
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
                 _ActionCard(
                   icon: Icons.shield,
                   title: 'Crop Insurance',

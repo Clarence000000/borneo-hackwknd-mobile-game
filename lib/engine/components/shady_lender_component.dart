@@ -6,9 +6,9 @@ import 'package:farm_fintech/engine/richi_farm_game.dart';
 
 /// A Shady Lender character placed on the farm map.
 ///
-/// Loads its sprite from `assets/images/shady_lender.png` and occupies a rectangular
-/// area on the map.
-class ShadyLenderComponent extends SpriteAnimationComponent with HasGameRef<RichiFarmGame> {
+/// Renders a single static frame from `assets/images/shady_lender.png`
+/// (the middle frame of the first row — standard standing pose).
+class ShadyLenderComponent extends SpriteComponent with HasGameRef<RichiFarmGame> {
   ShadyLenderComponent({
     required Vector2 position,
     required Vector2 size,
@@ -20,19 +20,18 @@ class ShadyLenderComponent extends SpriteAnimationComponent with HasGameRef<Rich
 
     try {
       final image = await game.images.load('shady_lender.png');
-      final textureSize = Vector2(image.width / 3, image.height / 4);
+      final frameWidth = image.width / 3;
+      final frameHeight = image.height / 4;
 
-      animation = SpriteAnimation.fromFrameData(
+      // Pick the middle frame of the first row (standing pose).
+      sprite = Sprite(
         image,
-        SpriteAnimationData.sequenced(
-          amount: 3,
-          stepTime: 0.2,
-          textureSize: textureSize,
-        ),
+        srcPosition: Vector2(frameWidth, 0),
+        srcSize: Vector2(frameWidth, frameHeight),
       );
 
-      // Ensure the component size matches the texture size
-      size = textureSize;
+      // Match component size to the cropped frame size.
+      size = Vector2(frameWidth, frameHeight);
     } catch (e) {
       developer.log(
         'Failed to load ShadyLender sprite: shady_lender.png — $e',
@@ -42,7 +41,7 @@ class ShadyLenderComponent extends SpriteAnimationComponent with HasGameRef<Rich
 
     // Render above crops (1) but below player (10).
     priority = 5;
-    
+
     add(RectangleHitbox());
   }
 
