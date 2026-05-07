@@ -1,8 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
 import 'package:farm_fintech/models/financial/bnpl_plan.dart';
 import 'package:farm_fintech/models/player.dart';
 import 'package:farm_fintech/services/admin_account_service.dart';
 import 'package:farm_fintech/models/tile.dart';
+import 'package:farm_fintech/models/financial/transaction.dart';
 import 'package:farm_fintech/config/constants.dart';
 
 /// Firestore CRUD service for player data.
@@ -126,7 +127,7 @@ class FirestoreService {
         });
   }
 
-  /// Log a transaction to build credit score
+  /// Log a transaction to build credit score (Legacy)
   Future<void> logTransaction(
     String uid, {
     required double amount,
@@ -139,6 +140,15 @@ class FirestoreService {
       'category': category, // e.g. 'deposit', 'withdrawal', 'bnplPayment'
       'timestamp': FieldValue.serverTimestamp(),
     });
+  }
+
+  /// Add a full transaction record
+  Future<void> addTransaction(String uid, Transaction tx) async {
+    await _db
+        .collection('users')
+        .doc(uid)
+        .collection('transactions')
+        .add(tx.toMap());
   }
 
   /// Save the entire game grid state

@@ -14,18 +14,21 @@ class InteractionOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const textColor = Color(0xFF2D1B10);
+    
     const parchmentColor = Color(0xFFF4E4BC);
     const leatherBorder = Color(0xFF5D4037);
 
     return Consumer<GameState>(
       builder: (context, state, child) {
-        if (state.interactableBuilding == null && state.interactableTile == null && state.interactableShadyLender == null) {
+        if (state.interactableBuilding == null &&
+            state.interactableTile == null &&
+            state.interactableShadyLender == null &&
+            state.isNearLyra == false) {
           return const SizedBox.shrink();
         }
 
         List<Widget> options = [];
-        Vector2 worldPos;
+        Vector2 worldPos = Vector2.zero();
 
         if (state.interactableShadyLender != null) {
           final lender = state.interactableShadyLender!;
@@ -42,7 +45,28 @@ class InteractionOverlay extends StatelessWidget {
             options.add(_buildOption('F', 'Merchant', () => game.onBuildingTapped?.call(building.buildingType)));
           }
           worldPos = Vector2(building.position.x + building.size.x, building.position.y + building.size.y / 2);
-        } else {
+        } else if (state.isNearLyra && game.lyraNpc != null) {
+          if (state.interactionMenuState == InteractionMenuState.main) {
+            options.add(_buildOption('F', 'Speak with Lyra', () {
+              state.interactionMenuState = InteractionMenuState.lyra;
+              state.refresh();
+            }));
+          } else if (state.interactionMenuState == InteractionMenuState.lyra) {
+            options.add(_buildOption('1', 'Chat with Lyra', () {
+              state.interactionMenuState = InteractionMenuState.main;
+              game.onLyraTapped?.call();
+            }));
+            options.add(_buildOption('2', 'Lyra\'s Quest', () {
+              state.interactionMenuState = InteractionMenuState.main;
+              game.onLyraQuestTapped?.call();
+            }));
+            options.add(_buildOption('ESC', 'Back', () {
+              state.interactionMenuState = InteractionMenuState.main;
+              state.refresh();
+            }));
+          }
+          worldPos = Vector2(game.lyraNpc!.position.x + 32, game.lyraNpc!.position.y + 16);
+        } else if (state.interactableTile != null) {
           final (col, row) = state.interactableTile!;
           final tile = state.grid[row][col];
           worldPos = Vector2(col * 16.0 + 16.0, row * 16.0 + 8.0);
@@ -116,7 +140,7 @@ class InteractionOverlay extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: leatherBorder, width: 3),
                 boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 8, offset: const Offset(4, 4)),
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(4, 4)),
                 ],
               ),
               child: Stack(
@@ -156,7 +180,7 @@ class InteractionOverlay extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: const Color(0xFF5D4037).withOpacity(0.1),
+                color: const Color(0xFF5D4037).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(

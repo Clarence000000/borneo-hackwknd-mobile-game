@@ -7,6 +7,7 @@ class Transaction {
   final TransactionCategory category;
   final double amount;
   final DateTime timestamp;
+  final String description;
 
   const Transaction({
     required this.id,
@@ -14,6 +15,7 @@ class Transaction {
     required this.category,
     required this.amount,
     required this.timestamp,
+    this.description = '',
   });
 
   Map<String, dynamic> toMap() => {
@@ -21,6 +23,7 @@ class Transaction {
     'category': category.name,
     'amount': amount,
     'timestamp': timestamp.millisecondsSinceEpoch,
+    'description': description,
   };
 
   factory Transaction.fromMap(String id, Map<String, dynamic> map) =>
@@ -30,6 +33,7 @@ class Transaction {
         category: _parseCategory(map['category']),
         amount: (map['amount'] as num?)?.toDouble() ?? 0,
         timestamp: _parseTimestamp(map['timestamp']),
+        description: map['description'] as String? ?? '',
       );
 }
 
@@ -100,4 +104,5 @@ enum TransactionCategory {
   insurancePremium,
   bankDeposit,
   bankWithdrawal,
+  other,
 }

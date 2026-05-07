@@ -31,9 +31,10 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
   double mapWidth = 0;
   double mapHeight = 0;
 
-  // Keyboard input state.
+  // Input state.
   int _horizontalDirection = 0;
   int _verticalDirection = 0;
+  bool _isSprinting = false;
 
   PlayerComponent() : super(size: Vector2(48, 48));
 
@@ -114,6 +115,9 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
         keysPressed.contains(LogicalKeyboardKey.arrowDown)) {
       _verticalDirection += 1;
     }
+    
+    _isSprinting = keysPressed.contains(LogicalKeyboardKey.shiftLeft) || 
+                   keysPressed.contains(LogicalKeyboardKey.shiftRight);
 
     return true;
   }
@@ -151,8 +155,9 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
       // Check collision at feet (center-bottom)
       final feetOffset = Vector2(0, 16);
       
-      final moveX = direction.x * speed * dt;
-      final moveY = direction.y * speed * dt;
+      final currentSpeed = _isSprinting ? speed * 2.0 : speed;
+      final moveX = direction.x * currentSpeed * dt;
+      final moveY = direction.y * currentSpeed * dt;
       
       if (moveX != 0) {
         final currentFeet = position + feetOffset;
@@ -198,16 +203,12 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
     // 1. Check building proximity
     BuildingComponent? closestBuilding;
     double minBldgDistSq = double.infinity;
-    // Buildings are usually large, check distance to bounding box center or just edges.
     for (final building in game.buildings) {
-      // Find center of building
       final bx = building.position.x + building.size.x / 2;
       final by = building.position.y + building.size.y / 2;
       final dx = position.x - bx;
       final dy = position.y - by;
       final distSq = dx * dx + dy * dy;
-      
-      // Interaction radius for buildings: slightly larger (e.g. 48 pixels ~ 3 tiles from center)
       if (distSq < 48 * 48 && distSq < minBldgDistSq) {
         minBldgDistSq = distSq;
         closestBuilding = building;
@@ -230,8 +231,23 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
     }
     game.gameState.updateInteractableShadyLender(nearShadyLender ? lender : null);
 
-    // If near a building or shady lender, we probably don't want to interact with a tile.
-    if (closestBuilding != null || nearShadyLender) {
+    // 2. Check Lyra proximity
+    bool isNearLyra = false;
+    if (closestBuilding == null && game.lyraNpc != null) {
+      final lx = game.lyraNpc!.position.x + 16.0; // center-ish of 32x32 sprite
+      final ly = game.lyraNpc!.position.y + 16.0;
+      final dx = position.x - lx;
+      final dy = position.y - ly;
+      final distSq = dx * dx + dy * dy;
+      // Interaction radius: 48 pixels (~3 tiles)
+      if (distSq < 48 * 48) {
+        isNearLyra = true;
+      }
+    }
+    game.gameState.updateNearLyra(isNearLyra);
+
+    // If near a building, shady lender, or Lyra, skip tile interaction.
+    if (closestBuilding != null || nearShadyLender || isNearLyra) {
       game.gameState.updateInteractableTile(null);
       return;
     }
