@@ -30,6 +30,9 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
   late TiledComponent _mapComponent;
   TiledComponent get mapComponent => _mapComponent;
 
+  /// Foreground layer for visual depth (rendered above player).
+  late TiledComponent _foregroundMap;
+
   /// Map pixel dimensions (calculated from TMX metadata).
   late double _mapWidth;
   late double _mapHeight;
@@ -67,14 +70,32 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     // Wire up game reference so GameState can call back.
     gameState.game = this;
 
+    // ── Map Loading ──────────────────────────────────────────
     // Load the Tiled map from assets/tiles/level1.tmx.
+    // We load it twice to separate background and foreground components
+    // so we can set different priorities (Z-indices).
+    
+    // 1. Background (Priority 0): Grass, Dirt, Water, Hills
     _mapComponent = await TiledComponent.load('level1.tmx', Vector2.all(16));
+    _mapComponent.priority = 0;
+    // Only keep layers that are NOT 'Foreground'
+    _mapComponent.tileMap.renderableLayers.removeWhere(
+      (layer) => layer.layer.name == 'Foreground'
+    );
+    world.add(_mapComponent);
+
+    // 2. Foreground (Priority 20): Roofs, Tree tops, Overlays
+    _foregroundMap = await TiledComponent.load('level1.tmx', Vector2.all(16));
+    _foregroundMap.priority = 20;
+    // ONLY keep layers named 'Foreground'
+    _foregroundMap.tileMap.renderableLayers.removeWhere(
+      (layer) => layer.layer.name != 'Foreground'
+    );
+    world.add(_foregroundMap);
 
     final map = _mapComponent.tileMap.map;
     _mapWidth = map.width * map.tileWidth.toDouble();
     _mapHeight = map.height * map.tileHeight.toDouble();
-
-    world.add(_mapComponent);
 
     // Mark farmland tiles from the TMX Tilled_Dirt layer.
     try {
@@ -142,6 +163,16 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     );
     _buildings.add(merchant);
     world.add(merchant);
+
+    // House: ~3×3 tiles, placed to the right of the merchant
+    final house = BuildingComponent(
+      buildingType: BuildingType.house,
+      gridCol: 20,
+      gridRow: 2,
+      buildingSize: Vector2(48, 48), // 3×3 tiles
+    );
+    _buildings.add(house);
+    world.add(house);
 
     // Set up camera.
     _setupCamera();
