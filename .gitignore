@@ -53,7 +53,6 @@ cloud_functions/node_modules/
 cloud_functions/lib/
 GEMINI.md
 CLAUDE.md
-.claude/
 
 linux/flutter/generated_plugin_registrant.*
 linux/flutter/generated_plugins.cmake
