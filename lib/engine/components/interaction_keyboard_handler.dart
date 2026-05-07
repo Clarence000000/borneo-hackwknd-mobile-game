@@ -15,6 +15,37 @@ class InteractionKeyboardHandler extends Component
 
     if (keysPressed.contains(LogicalKeyboardKey.digit1) || 
         keysPressed.contains(LogicalKeyboardKey.keyF)) {
+      
+      if (keysPressed.contains(LogicalKeyboardKey.keyF)) {
+        print('F key pressed');
+        final lender = game.shadyLender;
+        final player = game.playerComponent;
+        
+        if (lender != null && player != null) {
+          final dist = (player.position - lender.position).length;
+          print('Distance to ShadyLender: $dist');
+        } else {
+          print('Lender or Player is NULL: lender=$lender, player=$player');
+        }
+        
+        if (player != null && lender != null) {
+          final px = player.position.x;
+          final py = player.position.y;
+          final lx = lender.position.x + lender.size.x / 2;
+          final ly = lender.position.y + lender.size.y / 2;
+          final dx = px - lx;
+          final dy = py - ly;
+          final distSq = dx * dx + dy * dy;
+
+          // Check if distance is within interactable range (e.g., 64 pixels)
+          if (distSq < 64 * 64) {
+            game.gameState.showShadyDialogue = true;
+            game.gameState.refresh();
+            return true;
+          }
+        }
+      }
+
       gameState.handleInteractionKey(1);
     } else if (keysPressed.contains(LogicalKeyboardKey.digit2)) {
       gameState.handleInteractionKey(2);

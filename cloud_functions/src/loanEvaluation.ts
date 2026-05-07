@@ -1,9 +1,9 @@
-import * as functions from "firebase-functions";
-import { CallableRequest } from "firebase-functions/v2/https";
-import * as admin from "firebase-admin";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { initializeApp, getApps } from "firebase-admin/app";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
-if (!admin.apps.length) admin.initializeApp();
-const db = admin.firestore();
+if (!getApps().length) initializeApp();
+const db = getFirestore();
 
 const MIN_CREDIT_SCORE = 600; // Minimum score to qualify
 const INTEREST_RATE = 0.05; // 5% monthly interest
@@ -14,20 +14,20 @@ const INTEREST_RATE = 0.05; // 5% monthly interest
  * Evaluates whether a player qualifies for a bank loan based on their
  * Credit Score. If approved, creates the loan and deposits funds.
  */
-export const evaluateLoan = functions.https.onCall(
-    async (request: CallableRequest<any>) => {
+export const evaluateLoan = onCall(
+    async (request) => {
         const uid = request.auth?.uid;
-        if (!uid) throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
+        if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");
 
         const { amount, termMonths } = request.data;
         if (!amount || !termMonths) {
-            throw new functions.https.HttpsError("invalid-argument", "amount and termMonths required");
+            throw new HttpsError("invalid-argument", "amount and termMonths required");
         }
 
         // Get player's credit score
         const userDoc = await db.collection("users").doc(uid).get();
         if (!userDoc.exists) {
-            throw new functions.https.HttpsError("not-found", "User not found");
+            throw new HttpsError("not-found", "User not found");
         }
 
         const userData = userDoc.data()!;
@@ -74,12 +74,12 @@ export const evaluateLoan = functions.https.onCall(
             remainingBalance: totalRepayment,
             paidMonths: 0,
             status: "active",
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: FieldValue.serverTimestamp(),
         });
 
         // Deposit loan amount into bank balance
         await db.collection("users").doc(uid).update({
-            bankBalance: admin.firestore.FieldValue.increment(amount),
+            bankBalance: FieldValue.increment(amount),
         });
 
         return {

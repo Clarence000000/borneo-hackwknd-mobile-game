@@ -216,6 +216,21 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
     }
     game.gameState.updateInteractableBuilding(closestBuilding);
 
+    // 1b. Check ShadyLender proximity
+    final lender = game.shadyLender;
+    bool nearShadyLender = false;
+    if (lender != null) {
+      final lx = lender.position.x + lender.size.x / 2;
+      final ly = lender.position.y + lender.size.y / 2;
+      final dlx = position.x - lx;
+      final dly = position.y - ly;
+      final lenderDistSq = dlx * dlx + dly * dly;
+      if (lenderDistSq < 64 * 64) {
+        nearShadyLender = true;
+      }
+    }
+    game.gameState.updateInteractableShadyLender(nearShadyLender ? lender : null);
+
     // 2. Check Lyra proximity
     bool isNearLyra = false;
     if (closestBuilding == null && game.lyraNpc != null) {
@@ -231,8 +246,8 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
     }
     game.gameState.updateNearLyra(isNearLyra);
 
-    // If near a building or Lyra, we probably don't want to interact with a tile.
-    if (closestBuilding != null || isNearLyra) {
+    // If near a building, shady lender, or Lyra, skip tile interaction.
+    if (closestBuilding != null || nearShadyLender || isNearLyra) {
       game.gameState.updateInteractableTile(null);
       return;
     }
@@ -287,7 +302,9 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
     }
 
     try {
-      final map = game.mapComponent.tileMap.map;
+      final mapComp = game.mapComponent;
+      if (mapComp == null) return false;
+      final map = mapComp.tileMap.map;
       for (final layer in map.layers) {
         if (layer.name == 'Water' || layer.name == 'Hills') {
           final layerDyn = layer as dynamic;

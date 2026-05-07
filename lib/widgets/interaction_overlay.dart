@@ -20,16 +20,24 @@ class InteractionOverlay extends StatelessWidget {
 
     return Consumer<GameState>(
       builder: (context, state, child) {
-        if (state.interactableBuilding == null && 
-            state.interactableTile == null && 
-            (state.isNearLyra == false)) {
+        if (state.interactableBuilding == null &&
+            state.interactableTile == null &&
+            state.interactableShadyLender == null &&
+            state.isNearLyra == false) {
           return const SizedBox.shrink();
         }
 
         List<Widget> options = [];
         Vector2 worldPos = Vector2.zero();
 
-        if (state.interactableBuilding != null) {
+        if (state.interactableShadyLender != null) {
+          final lender = state.interactableShadyLender!;
+          options.add(_buildOption('F', 'Shady Lender', () {
+            state.showShadyDialogue = true;
+            state.refresh();
+          }));
+          worldPos = Vector2(lender.position.x + lender.size.x, lender.position.y + lender.size.y / 2);
+        } else if (state.interactableBuilding != null) {
           final building = state.interactableBuilding!;
           if (building.buildingType == BuildingType.bank) {
             options.add(_buildOption('F', 'Bank', () => game.onBuildingTapped?.call(building.buildingType)));
@@ -90,9 +98,9 @@ class InteractionOverlay extends StatelessWidget {
         }
 
         final screenPos = game.camera.viewfinder.localToGlobal(worldPos);
-        final playerScreenPos = game.isLoaded 
-            ? game.camera.viewfinder.localToGlobal(game.playerComponent.position)
-            : screenPos;
+        final playerComp = game.playerComponent;
+        if (playerComp == null) return const SizedBox.shrink();
+        final playerScreenPos = game.camera.viewfinder.localToGlobal(playerComp.position);
         
         // Decide whether to show box on the left or right of the tile
         // to avoid the player character.

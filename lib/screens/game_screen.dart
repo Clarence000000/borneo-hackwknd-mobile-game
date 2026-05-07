@@ -20,6 +20,7 @@ import 'package:farm_fintech/utils/currency_util.dart';
 import 'package:farm_fintech/services/seed_service.dart';
 import 'package:farm_fintech/screens/bank_screen.dart';
 import 'package:farm_fintech/screens/merchant_screen.dart';
+import 'package:farm_fintech/widgets/shady_dialogue_panel.dart';
 import 'package:farm_fintech/widgets/lyra_dialog_box.dart';
 import 'package:farm_fintech/services/gemini_service.dart';
 
@@ -193,6 +194,290 @@ class _GameScreenState extends State<GameScreen> {
                 },
                 child: GameWidget(
                   game: _game,
+                  overlayBuilderMap: {
+                    'ShadyLenderMenu': (context, game) {
+                      final state = context.read<GameState>();
+                      final player = state.player;
+                      final country = player?.country ?? 'MY';
+                      final debt = state.sharkDebt;
+                      final hasDebt = debt > 0;
+
+                      return Center(
+                        child: Material(
+                          color: Colors.black54,
+                          child: Center(
+                            child: Container(
+                              width: 380,
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1A1A2E),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: const Color(0xFFCC0000).withValues(alpha: 0.7),
+                                  width: 2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.red.withValues(alpha: 0.3),
+                                    blurRadius: 32,
+                                    spreadRadius: 4,
+                                  ),
+                                ],
+                              ),
+                              child: hasDebt
+                                  // ── REPAYMENT MODE ──
+                                  ? Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text(
+                                          '🦈 Underground Lending',
+                                          style: TextStyle(
+                                            color: Color(0xFFFF4444),
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withValues(alpha: 0.05),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Column(
+                                            children: [
+                                              const Text(
+                                                'Current Balance Owed',
+                                                style: TextStyle(
+                                                  color: Color(0xFFAAAAAA),
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                CurrencyUtil.format(debt, country),
+                                                style: const TextStyle(
+                                                  color: Color(0xFFFF4444),
+                                                  fontSize: 28,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red.withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                                          ),
+                                          child: const Text(
+                                            '⚠️ Pay up before things get ugly...',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              color: Color(0xFFFF6666),
+                                              fontSize: 12,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 20),
+                                        // Repay Full Amount
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: ElevatedButton(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: const Color(0xFF228B22),
+                                              foregroundColor: Colors.white,
+                                              padding: const EdgeInsets.symmetric(vertical: 14),
+                                              disabledBackgroundColor: const Color(0xFF333333),
+                                              disabledForegroundColor: const Color(0xFF666666),
+                                            ),
+                                            onPressed: (player != null && (player.cashBalance + player.bankBalance) >= debt)
+                                                ? () async {
+                                                    _game.overlays.remove('ShadyLenderMenu');
+                                                    final repaid = await state.repaySharkLoan(debt);
+                                                    if (!context.mounted) return;
+                                                    DialogPopup.show(
+                                                      context,
+                                                      title: '✅ Debt Cleared!',
+                                                      message: 'You repaid ${CurrencyUtil.format(repaid, country)}. You are free... for now.',
+                                                      icon: Icons.check_circle,
+                                                      iconColor: GameColors.uiGreen,
+                                                    );
+                                                  }
+                                                : null,
+                                            child: Text(
+                                              'Repay Full Amount (${CurrencyUtil.format(debt, country)})',
+                                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        // Repay Partial
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: OutlinedButton(
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: GameColors.uiGold,
+                                              side: BorderSide(color: GameColors.uiGold.withValues(alpha: 0.5)),
+                                              padding: const EdgeInsets.symmetric(vertical: 14),
+                                            ),
+                                            onPressed: (player != null && (player.cashBalance + player.bankBalance) >= 500 && debt >= 500)
+                                                ? () async {
+                                                    _game.overlays.remove('ShadyLenderMenu');
+                                                    final repaid = await state.repaySharkLoan(500);
+                                                    if (!context.mounted) return;
+                                                    DialogPopup.show(
+                                                      context,
+                                                      title: '💰 Partial Repayment',
+                                                      message: 'You repaid ${CurrencyUtil.format(repaid, country)}. Remaining: ${CurrencyUtil.format(state.sharkDebt, country)}',
+                                                      icon: Icons.payments,
+                                                      iconColor: GameColors.uiGold,
+                                                    );
+                                                  }
+                                                : null,
+                                            child: Text(
+                                              'Repay Partial (${CurrencyUtil.format(500, country)})',
+                                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        // Leave
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: TextButton(
+                                            onPressed: () {
+                                              _game.overlays.remove('ShadyLenderMenu');
+                                            },
+                                            child: const Text(
+                                              'Leave',
+                                              style: TextStyle(color: Color(0xFFAAAAAA)),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  // ── BORROW MODE ──
+                                  : Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text(
+                                          '🦈 Underground Lending',
+                                          style: TextStyle(
+                                            color: Color(0xFFFF4444),
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withValues(alpha: 0.05),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Column(
+                                            children: [
+                                              Text(
+                                                'Instant cash: ${CurrencyUtil.format(1200, country)}',
+                                                style: const TextStyle(
+                                                  color: GameColors.uiGold,
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              const Text(
+                                                'Interest: 35% / month\nRepay in 3 months or face consequences',
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  color: Color(0xFFAAAAAA),
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red.withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                                          ),
+                                          child: const Text(
+                                            '⚠️ By signing this contract, you gain instant liquidity, but do not forget the hidden costs...',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              color: Color(0xFFFF6666),
+                                              fontSize: 12,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 20),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: OutlinedButton(
+                                                style: OutlinedButton.styleFrom(
+                                                  foregroundColor: const Color(0xFFAAAAAA),
+                                                  side: const BorderSide(color: Color(0xFF555555)),
+                                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                                ),
+                                                onPressed: () {
+                                                  _game.overlays.remove('ShadyLenderMenu');
+                                                },
+                                                child: const Text('Leave'),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: ElevatedButton(
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: const Color(0xFFCC0000),
+                                                  foregroundColor: Colors.white,
+                                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                                ),
+                                                onPressed: () async {
+                                                  _game.overlays.remove('ShadyLenderMenu');
+
+                                                  final ok = await state.takeLoanSharkLoan(1200);
+                                                  if (!context.mounted) return;
+
+                                                  DialogPopup.show(
+                                                    context,
+                                                    title: ok ? '⚠️ Cash Received' : 'Loan Failed',
+                                                    message: ok
+                                                        ? 'You got ${CurrencyUtil.format(1200, country)} in cash. Repay soon — or else!'
+                                                        : 'Unable to process the loan.',
+                                                    icon: ok ? Icons.dangerous : Icons.error_outline,
+                                                    iconColor: ok ? GameColors.uiRed : GameColors.uiTextDim,
+                                                  );
+                                                },
+                                                child: Text(
+                                                  'Accept ${CurrencyUtil.format(1200, country)} (35%/mo)',
+                                                  textAlign: TextAlign.center,
+                                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  },
                   focusNode: _gameFocusNode,
                 ),
               ),
@@ -220,7 +505,11 @@ class _GameScreenState extends State<GameScreen> {
               // ── Layer 4: Interaction Overlay ────────────────
               if (!_lyraDialogOpen) InteractionOverlay(game: _game),
 
-              // ── Layer 5: Lyra danger badge (bottom-left corner) ──
+              // ── Layer 5: Shady Lender Dialogue ─────
+              if (state.showShadyDialogue)
+                ShadyDialoguePanel(game: _game),
+
+              // ── Layer 6: Lyra danger badge (bottom-left corner) ──
               if (_lyraDangerous == true && _lyraDialogOpen == false)
                 Positioned(
                   bottom: 20,
@@ -230,7 +519,7 @@ class _GameScreenState extends State<GameScreen> {
                   ),
                 ),
 
-              // ── Layer 6: Lyra VN dialog box ───────────────────
+              // ── Layer 7: Lyra VN dialog box ───────────────────
               if (_lyraDialogOpen == true)
                 LyraDialogBox(
                   initialTrustScore: _lyraTrustScore,

@@ -1,44 +1,12 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.calculateBnplPenalty = exports.repayBnplInstallment = void 0;
-const functions = __importStar(require("firebase-functions"));
-const admin = __importStar(require("firebase-admin"));
-if (!admin.apps.length)
-    admin.initializeApp();
-const db = admin.firestore();
+exports.createBnplPlan = exports.calculateBnplPenalty = exports.repayBnplInstallment = void 0;
+const https_1 = require("firebase-functions/v2/https");
+const app_1 = require("firebase-admin/app");
+const firestore_1 = require("firebase-admin/firestore");
+if (!(0, app_1.getApps)().length)
+    (0, app_1.initializeApp)();
+const db = (0, firestore_1.getFirestore)();
 // Penalty config (realistic Malaysian BNPL fees)
 const ADMIN_FEE = 10; // RM10 admin fee per missed payment
 const LATE_FEE = 23; // RM23 late payment fee
@@ -98,7 +66,7 @@ async function applyInstallmentPayment(uid, planRef, plan, method, isAdmin) {
     const lateFees = ((_a = plan.lateFees) !== null && _a !== void 0 ? _a : 0);
     const amountDue = monthlyAmount + lateFees;
     if (installments <= 0 || monthlyAmount <= 0) {
-        throw new functions.https.HttpsError("failed-precondition", "Invalid BNPL plan configuration");
+        throw new https_1.HttpsError("failed-precondition", "Invalid BNPL plan configuration");
     }
     if (paidInstallments >= installments) {
         await planRef.update({ status: "paid" });
@@ -112,7 +80,7 @@ async function applyInstallmentPayment(uid, planRef, plan, method, isAdmin) {
     const userDoc = await userRef.get();
     const userData = userDoc.data();
     if (!userData) {
-        throw new functions.https.HttpsError("not-found", "User not found");
+        throw new https_1.HttpsError("not-found", "User not found");
     }
     let wallet = "admin";
     if (!isAdmin) {
@@ -126,7 +94,7 @@ async function applyInstallmentPayment(uid, planRef, plan, method, isAdmin) {
             };
         }
         await userRef.update({
-            [`${wallet}Balance`]: admin.firestore.FieldValue.increment(-amountDue),
+            [`${wallet}Balance`]: firestore_1.FieldValue.increment(-amountDue),
         });
     }
     const nextPaidInstallments = paidInstallments + 1;
@@ -139,7 +107,7 @@ async function applyInstallmentPayment(uid, planRef, plan, method, isAdmin) {
         paidMonths: nextPaidInstallments,
         remainingAmount: Math.max(0, (installments - nextPaidInstallments) * monthlyAmount),
         lateFees: 0,
-        nextDueDate: admin.firestore.Timestamp.fromDate(nextDueDate),
+        nextDueDate: firestore_1.Timestamp.fromDate(nextDueDate),
         nextDueDay: nextDueDay != null ? nextDueDay + GAME_DAYS_PER_MONTH : null,
         status: isFullyPaid ? "paid" : "active",
     });
@@ -147,7 +115,7 @@ async function applyInstallmentPayment(uid, planRef, plan, method, isAdmin) {
         amount: amountDue,
         paymentType: wallet,
         category: "bnplPayment",
-        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        timestamp: firestore_1.FieldValue.serverTimestamp(),
     });
     return {
         paidInstallment: true,
@@ -160,15 +128,15 @@ async function applyInstallmentPayment(uid, planRef, plan, method, isAdmin) {
             : `Installment paid from ${wallet}.`,
     };
 }
-exports.repayBnplInstallment = functions.https.onCall(async (request) => {
+exports.repayBnplInstallment = (0, https_1.onCall)(async (request) => {
     var _a, _b, _c, _d, _e;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     const email = (_c = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _c === void 0 ? void 0 : _c.email;
     if (!uid)
-        throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
+        throw new https_1.HttpsError("unauthenticated", "Must be logged in");
     const { planId, paymentMethod, currentDay } = request.data;
     if (!planId) {
-        throw new functions.https.HttpsError("invalid-argument", "planId required");
+        throw new https_1.HttpsError("invalid-argument", "planId required");
     }
     const normalizedMethod = ["cash", "bank", "auto"].includes(paymentMethod)
         ? paymentMethod
@@ -180,7 +148,7 @@ exports.repayBnplInstallment = functions.https.onCall(async (request) => {
         .doc(planId);
     const planDoc = await planRef.get();
     if (!planDoc.exists) {
-        throw new functions.https.HttpsError("not-found", "BNPL plan not found");
+        throw new https_1.HttpsError("not-found", "BNPL plan not found");
     }
     const plan = planDoc.data();
     if (((_d = plan.status) !== null && _d !== void 0 ? _d : "active") !== "active") {
@@ -218,15 +186,15 @@ exports.repayBnplInstallment = functions.https.onCall(async (request) => {
  * Called when a BNPL installment is overdue.
  * Applies realistic penalty charges to teach the dangers of BNPL debt traps.
  */
-exports.calculateBnplPenalty = functions.https.onCall(async (request) => {
+exports.calculateBnplPenalty = (0, https_1.onCall)(async (request) => {
     var _a, _b, _c;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     const email = (_c = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _c === void 0 ? void 0 : _c.email;
     if (!uid)
-        throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
+        throw new https_1.HttpsError("unauthenticated", "Must be logged in");
     const { planId, currentDay } = request.data;
     if (!planId) {
-        throw new functions.https.HttpsError("invalid-argument", "planId required");
+        throw new https_1.HttpsError("invalid-argument", "planId required");
     }
     const planRef = db
         .collection("users")
@@ -235,7 +203,7 @@ exports.calculateBnplPenalty = functions.https.onCall(async (request) => {
         .doc(planId);
     const planDoc = await planRef.get();
     if (!planDoc.exists) {
-        throw new functions.https.HttpsError("not-found", "BNPL plan not found");
+        throw new https_1.HttpsError("not-found", "BNPL plan not found");
     }
     const plan = planDoc.data();
     const userRef = db.collection("users").doc(uid);
@@ -275,18 +243,18 @@ exports.calculateBnplPenalty = functions.https.onCall(async (request) => {
     const totalPenalty = ADMIN_FEE + LATE_FEE;
     // Apply penalty
     await planRef.update({
-        lateFees: admin.firestore.FieldValue.increment(totalPenalty),
+        lateFees: firestore_1.FieldValue.increment(totalPenalty),
     });
     // Deduct from player's wallet (cash first, then bank)
     let deductedFrom = "cash";
     if (userData.cashBalance >= totalPenalty) {
         await userRef.update({
-            cashBalance: admin.firestore.FieldValue.increment(-totalPenalty),
+            cashBalance: firestore_1.FieldValue.increment(-totalPenalty),
         });
     }
     else if (userData.bankBalance >= totalPenalty) {
         await userRef.update({
-            bankBalance: admin.firestore.FieldValue.increment(-totalPenalty),
+            bankBalance: firestore_1.FieldValue.increment(-totalPenalty),
         });
         deductedFrom = "bank";
     }
@@ -309,5 +277,57 @@ exports.calculateBnplPenalty = functions.https.onCall(async (request) => {
         defaulted: false,
         message: `Late payment penalty: RM${ADMIN_FEE} admin fee + RM${LATE_FEE} late fee = RM${totalPenalty} deducted from ${deductedFrom}.`,
     };
+});
+/**
+ * Create BNPL Plan
+ * Callable: Expects { totalAmount, installments|termMonths, monthlyAmount?, paymentMethod?, startDay?, merchant?, description? }
+ * Writes a document under users/{uid}/bnplPlans/{autoId}
+ */
+exports.createBnplPlan = (0, https_1.onCall)(async (request) => {
+    var _a, _b, _c, _d, _e, _f;
+    const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
+    if (!uid)
+        throw new https_1.HttpsError("unauthenticated", "Must be logged in");
+    const data = request.data || {};
+    const totalAmount = Number((_c = (_b = data.totalAmount) !== null && _b !== void 0 ? _b : data.amount) !== null && _c !== void 0 ? _c : 0);
+    const installments = Number((_e = (_d = data.installments) !== null && _d !== void 0 ? _d : data.termMonths) !== null && _e !== void 0 ? _e : 0);
+    let monthlyAmount = data.monthlyAmount != null ? Number(data.monthlyAmount) : null;
+    const paymentMethod = (_f = data.paymentMethod) !== null && _f !== void 0 ? _f : "auto";
+    const merchant = typeof data.merchant === "string" ? data.merchant : "merchant";
+    const description = typeof data.description === "string" ? data.description : "BNPL purchase";
+    if (!(totalAmount > 0)) {
+        throw new https_1.HttpsError("invalid-argument", "totalAmount required and must be > 0");
+    }
+    if (!(installments > 0) && !(monthlyAmount && monthlyAmount > 0)) {
+        throw new https_1.HttpsError("invalid-argument", "Either installments (termMonths) or monthlyAmount must be provided and > 0");
+    }
+    if (!monthlyAmount) {
+        monthlyAmount = installments > 0 ? totalAmount / installments : totalAmount;
+    }
+    const nextDueDate = new Date(Date.now() + GAME_DAYS_PER_MONTH * DAY_MS);
+    const startDay = typeof data.startDay === "number" ? data.startDay : null;
+    const nextDueDay = startDay != null ? startDay + GAME_DAYS_PER_MONTH : null;
+    const plan = {
+        itemName: description,
+        totalAmount,
+        installments,
+        termMonths: installments,
+        monthlyAmount,
+        monthlyPayment: monthlyAmount,
+        paidInstallments: 0,
+        paidMonths: 0,
+        remainingAmount: totalAmount,
+        lateFees: 0,
+        status: "active",
+        paymentMethod,
+        merchant,
+        description,
+        createdAt: firestore_1.FieldValue.serverTimestamp(),
+        nextDueDate: firestore_1.Timestamp.fromDate(nextDueDate),
+        nextDueDay,
+    };
+    const planRef = await db.collection("users").doc(uid).collection("bnplPlans").add(plan);
+    const created = await planRef.get();
+    return { planId: planRef.id, plan: created.data() };
 });
 //# sourceMappingURL=bnplCalculation.js.map

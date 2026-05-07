@@ -1,9 +1,9 @@
-import * as functions from "firebase-functions";
-import { CallableRequest } from "firebase-functions/v2/https";
-import * as admin from "firebase-admin";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { initializeApp, getApps } from "firebase-admin/app";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
-if (!admin.apps.length) admin.initializeApp();
-const db = admin.firestore();
+if (!getApps().length) initializeApp();
+const db = getFirestore();
 
 /**
  * Insurance Payout Cloud Function
@@ -11,14 +11,14 @@ const db = admin.firestore();
  * When a disaster event occurs, checks if the player has active insurance.
  * If insured, calculates and deposits the payout into their virtual wallet.
  */
-export const processInsurancePayout = functions.https.onCall(
-    async (request: CallableRequest<any>) => {
+export const processInsurancePayout = onCall(
+    async (request) => {
         const uid = request.auth?.uid;
-        if (!uid) throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
+        if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");
 
         const { eventId } = request.data;
         if (!eventId) {
-            throw new functions.https.HttpsError("invalid-argument", "eventId required");
+            throw new HttpsError("invalid-argument", "eventId required");
         }
 
         // Get the disaster event
@@ -30,7 +30,7 @@ export const processInsurancePayout = functions.https.onCall(
             .get();
 
         if (!eventDoc.exists) {
-            throw new functions.https.HttpsError("not-found", "Disaster event not found");
+            throw new HttpsError("not-found", "Disaster event not found");
         }
 
         const event = eventDoc.data()!;
@@ -76,7 +76,7 @@ export const processInsurancePayout = functions.https.onCall(
         if (totalPayout > 0) {
             // Deposit payout into bank balance
             await db.collection("users").doc(uid).update({
-                bankBalance: admin.firestore.FieldValue.increment(totalPayout),
+                bankBalance: FieldValue.increment(totalPayout),
             });
 
             // Update disaster event with payout info

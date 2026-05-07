@@ -1,9 +1,9 @@
-import * as functions from "firebase-functions";
-import { CallableRequest } from "firebase-functions/v2/https";
-import * as admin from "firebase-admin";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { initializeApp, getApps } from "firebase-admin/app";
+import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 
-if (!admin.apps.length) admin.initializeApp();
-const db = admin.firestore();
+if (!getApps().length) initializeApp();
+const db = getFirestore();
 
 // Penalty config (realistic Malaysian BNPL fees)
 const ADMIN_FEE = 10; // RM10 admin fee per missed payment
@@ -76,7 +76,7 @@ async function applyInstallmentPayment(
     const amountDue = monthlyAmount + lateFees;
 
     if (installments <= 0 || monthlyAmount <= 0) {
-        throw new functions.https.HttpsError("failed-precondition", "Invalid BNPL plan configuration");
+        throw new HttpsError("failed-precondition", "Invalid BNPL plan configuration");
     }
     if (paidInstallments >= installments) {
         await planRef.update({status: "paid"});
@@ -91,7 +91,7 @@ async function applyInstallmentPayment(
     const userDoc = await userRef.get();
     const userData = userDoc.data();
     if (!userData) {
-        throw new functions.https.HttpsError("not-found", "User not found");
+        throw new HttpsError("not-found", "User not found");
     }
 
     let wallet: "cash" | "bank" | "admin" | null = "admin";
@@ -107,7 +107,7 @@ async function applyInstallmentPayment(
         }
 
         await userRef.update({
-            [`${wallet}Balance`]: admin.firestore.FieldValue.increment(-amountDue),
+            [`${wallet}Balance`]: FieldValue.increment(-amountDue),
         });
     }
 
@@ -122,7 +122,7 @@ async function applyInstallmentPayment(
         paidMonths: nextPaidInstallments,
         remainingAmount: Math.max(0, (installments - nextPaidInstallments) * monthlyAmount),
         lateFees: 0,
-        nextDueDate: admin.firestore.Timestamp.fromDate(nextDueDate),
+        nextDueDate: Timestamp.fromDate(nextDueDate),
         nextDueDay: nextDueDay != null ? nextDueDay + GAME_DAYS_PER_MONTH : null,
         status: isFullyPaid ? "paid" : "active",
     });
@@ -131,7 +131,7 @@ async function applyInstallmentPayment(
         amount: amountDue,
         paymentType: wallet,
         category: "bnplPayment",
-        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        timestamp: FieldValue.serverTimestamp(),
     });
 
     return {
@@ -146,15 +146,15 @@ async function applyInstallmentPayment(
     };
 }
 
-export const repayBnplInstallment = functions.https.onCall(
-    async (request: CallableRequest<any>) => {
+export const repayBnplInstallment = onCall(
+    async (request) => {
         const uid = request.auth?.uid;
         const email = request.auth?.token?.email as string | undefined;
-        if (!uid) throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
+        if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");
 
         const {planId, paymentMethod, currentDay} = request.data;
         if (!planId) {
-            throw new functions.https.HttpsError("invalid-argument", "planId required");
+            throw new HttpsError("invalid-argument", "planId required");
         }
 
         const normalizedMethod = (["cash", "bank", "auto"] as PaymentMethod[]).includes(paymentMethod)
@@ -169,7 +169,7 @@ export const repayBnplInstallment = functions.https.onCall(
 
         const planDoc = await planRef.get();
         if (!planDoc.exists) {
-            throw new functions.https.HttpsError("not-found", "BNPL plan not found");
+            throw new HttpsError("not-found", "BNPL plan not found");
         }
         const plan = planDoc.data()!;
 
@@ -214,15 +214,15 @@ export const repayBnplInstallment = functions.https.onCall(
  * Called when a BNPL installment is overdue.
  * Applies realistic penalty charges to teach the dangers of BNPL debt traps.
  */
-export const calculateBnplPenalty = functions.https.onCall(
-    async (request: CallableRequest<any>) => {
+export const calculateBnplPenalty = onCall(
+    async (request) => {
         const uid = request.auth?.uid;
         const email = request.auth?.token?.email as string | undefined;
-        if (!uid) throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
+        if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");
 
         const { planId, currentDay } = request.data;
         if (!planId) {
-            throw new functions.https.HttpsError("invalid-argument", "planId required");
+            throw new HttpsError("invalid-argument", "planId required");
         }
 
         const planRef = db
@@ -233,7 +233,7 @@ export const calculateBnplPenalty = functions.https.onCall(
 
         const planDoc = await planRef.get();
         if (!planDoc.exists) {
-            throw new functions.https.HttpsError("not-found", "BNPL plan not found");
+            throw new HttpsError("not-found", "BNPL plan not found");
         }
 
         const plan = planDoc.data()!;
@@ -279,18 +279,18 @@ export const calculateBnplPenalty = functions.https.onCall(
 
         // Apply penalty
         await planRef.update({
-            lateFees: admin.firestore.FieldValue.increment(totalPenalty),
+            lateFees: FieldValue.increment(totalPenalty),
         });
 
         // Deduct from player's wallet (cash first, then bank)
         let deductedFrom = "cash";
         if (userData.cashBalance >= totalPenalty) {
             await userRef.update({
-                cashBalance: admin.firestore.FieldValue.increment(-totalPenalty),
+                cashBalance: FieldValue.increment(-totalPenalty),
             });
         } else if (userData.bankBalance >= totalPenalty) {
             await userRef.update({
-                bankBalance: admin.firestore.FieldValue.increment(-totalPenalty),
+                bankBalance: FieldValue.increment(-totalPenalty),
             });
             deductedFrom = "bank";
         } else {
@@ -321,10 +321,10 @@ export const calculateBnplPenalty = functions.https.onCall(
  * Callable: Expects { totalAmount, installments|termMonths, monthlyAmount?, paymentMethod?, startDay?, merchant?, description? }
  * Writes a document under users/{uid}/bnplPlans/{autoId}
  */
-export const createBnplPlan = functions.https.onCall(
-    async (request: CallableRequest<any>) => {
+export const createBnplPlan = onCall(
+    async (request) => {
         const uid = request.auth?.uid;
-        if (!uid) throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
+        if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");
 
         const data = request.data || {};
         const totalAmount = Number(data.totalAmount ?? data.amount ?? 0);
@@ -335,10 +335,10 @@ export const createBnplPlan = functions.https.onCall(
         const description = typeof data.description === "string" ? data.description : "BNPL purchase";
 
         if (!(totalAmount > 0)) {
-            throw new functions.https.HttpsError("invalid-argument", "totalAmount required and must be > 0");
+            throw new HttpsError("invalid-argument", "totalAmount required and must be > 0");
         }
         if (!(installments > 0) && !(monthlyAmount && monthlyAmount > 0)) {
-            throw new functions.https.HttpsError(
+            throw new HttpsError(
                 "invalid-argument",
                 "Either installments (termMonths) or monthlyAmount must be provided and > 0",
             );
@@ -353,6 +353,7 @@ export const createBnplPlan = functions.https.onCall(
         const nextDueDay = startDay != null ? startDay + GAME_DAYS_PER_MONTH : null;
 
         const plan: any = {
+            itemName: description,
             totalAmount,
             installments,
             termMonths: installments,
@@ -366,8 +367,8 @@ export const createBnplPlan = functions.https.onCall(
             paymentMethod,
             merchant,
             description,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            nextDueDate: admin.firestore.Timestamp.fromDate(nextDueDate),
+            createdAt: FieldValue.serverTimestamp(),
+            nextDueDate: Timestamp.fromDate(nextDueDate),
             nextDueDay,
         };
 

@@ -53,7 +53,7 @@ class BnplPlan {
 
   factory BnplPlan.fromMap(String id, Map<String, dynamic> map) => BnplPlan(
     id: id,
-    itemName: map['itemName'] as String,
+    itemName: (map['itemName'] ?? map['description'] ?? map['merchant'] ?? 'BNPL Item') as String,
     totalAmount: (map['totalAmount'] as num).toDouble(),
     installments: map['installments'] as int,
     paidInstallments: map['paidInstallments'] as int? ?? 0,

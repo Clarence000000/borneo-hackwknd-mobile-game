@@ -14,6 +14,7 @@ import 'package:farm_fintech/engine/components/weather_effect_component.dart';
 import 'package:farm_fintech/engine/components/night_overlay_component.dart';
 import 'package:farm_fintech/engine/components/player_component.dart';
 import 'package:farm_fintech/engine/components/interaction_keyboard_handler.dart';
+import 'package:farm_fintech/engine/components/shady_lender_component.dart';
 import 'package:farm_fintech/engine/components/lyra_npc_component.dart';
 import 'package:farm_fintech/engine/crop_image_registry.dart';
 import 'package:farm_fintech/providers/game_state.dart';
@@ -28,29 +29,31 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
   final GameState gameState;
 
   /// The loaded Tiled map component.
-  late TiledComponent _mapComponent;
-  TiledComponent get mapComponent => _mapComponent;
+  TiledComponent? _mapComponent;
+  TiledComponent? get mapComponent => _mapComponent;
 
   /// Map pixel dimensions (calculated from TMX metadata).
-  late double _mapWidth;
-  late double _mapHeight;
+  double _mapWidth = 0;
+  double _mapHeight = 0;
 
   /// Active crop components, keyed by (col, row).
   final Map<(int, int), CropComponent> _cropComponents = {};
 
   /// Player character.
-  late PlayerComponent playerComponent;
+  PlayerComponent? playerComponent;
 
   /// Joystick.
   JoystickComponent? joystick;
 
-
   /// Weather visual effects overlay.
-  late WeatherEffectComponent _weatherEffect;
+  WeatherEffectComponent? _weatherEffect;
 
   /// Buildings on the map.
   final List<BuildingComponent> _buildings = [];
   List<BuildingComponent> get buildings => _buildings;
+
+  /// The Shady Lender character on the map.
+  ShadyLenderComponent? shadyLender;
 
   /// Callback when a building is tapped — set by GameScreen for navigation.
   void Function(BuildingType type)? onBuildingTapped;
@@ -76,92 +79,122 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     // Wire up game reference so GameState can call back.
     gameState.game = this;
 
-    // Load the Tiled map from assets/tiles/level1.tmx.
-    _mapComponent = await TiledComponent.load('level1.tmx', Vector2.all(16));
-
-    final map = _mapComponent.tileMap.map;
-    _mapWidth = map.width * map.tileWidth.toDouble();
-    _mapHeight = map.height * map.tileHeight.toDouble();
-
-    world.add(_mapComponent);
-
-    // Mark farmland tiles from the TMX Tilled_Dirt layer.
     try {
-      gameState.markFarmableFromTiled(_mapComponent.tileMap.map);
-    } catch (e) {
-      developer.log('markFarmableFromTiled error: $e', name: 'RichiFarmGame');
+      // Load the Tiled map from assets/tiles/level1.tmx.
+      _mapComponent = await TiledComponent.load('level1.tmx', Vector2.all(16));
+
+      final map = _mapComponent!.tileMap.map;
+      _mapWidth = map.width * map.tileWidth.toDouble();
+      _mapHeight = map.height * map.tileHeight.toDouble();
+
+      world.add(_mapComponent!);
+
+      // Mark farmland tiles from the TMX Tilled_Dirt layer.
+      try {
+        gameState.markFarmableFromTiled(_mapComponent!.tileMap.map);
+      } catch (e) {
+        developer.log('markFarmableFromTiled error: $e', name: 'RichiFarmGame');
+      }
+
+      // Parse ShadyLender from Tiled object layers
+      final mapComp = _mapComponent;
+      if (mapComp != null) {
+        for (final layer in mapComp.tileMap.map.layers) {
+          if (layer is ObjectGroup) {
+            for (final obj in layer.objects) {
+              if (obj.name == 'ShadyLender') {
+                final lender = ShadyLenderComponent(
+                  position: Vector2(obj.x, obj.y),
+                  size: Vector2(obj.width, obj.height),
+                );
+                shadyLender = lender;
+                world.add(lender);
+              }
+            }
+          }
+        }
+      }
+
+      // Pre-cache crop sprites.
+      developer.log('Loading crop images...', name: 'RichiFarmGame');
+      await CropImageRegistry.loadAll();
+      developer.log('Crop images loaded', name: 'RichiFarmGame');
+
+      // ── Player character ──────────────────────────────────────
+      playerComponent = PlayerComponent();
+      playerComponent!.position = Vector2((_mapWidth / 2) + 120, _mapHeight / 2);
+      playerComponent!.mapWidth = _mapWidth;
+      playerComponent!.mapHeight = _mapHeight;
+      world.add(playerComponent!);
+
+      // Keyboard handler for crop interactions
+      add(InteractionKeyboardHandler());
+
+      // Joystick (always shown — on mobile it's the primary control,
+      // on desktop/web it's supplementary to WASD/arrow keys).
+      joystick = JoystickComponent(
+        knob: CircleComponent(
+          radius: 15,
+          paint: Paint()..color = const Color(0xFFFFFFFF),
+        ),
+        background: CircleComponent(
+          radius: 50,
+          paint: Paint()..color = const Color(0x88FFFFFF),
+        ),
+        margin: const EdgeInsets.only(left: 40, bottom: 40),
+      );
+      camera.viewport.add(joystick!);
+
+
+      // Weather effect overlay (renders behind joystick).
+      _weatherEffect = WeatherEffectComponent();
+      camera.viewport.add(_weatherEffect!);
+
+      // Night overlay effect
+      final nightOverlay = NightOverlayComponent();
+      camera.viewport.add(nightOverlay);
+
+      // ── Buildings ──────────────────────────────────────────
+      // Bank: ~3×4 tiles, placed near top-left
+      final bank = BuildingComponent(
+        buildingType: BuildingType.bank,
+        gridCol: 2,
+        gridRow: 2,
+        buildingSize: Vector2(48, 64), // 3×4 tiles
+      );
+      _buildings.add(bank);
+      world.add(bank);
+
+      // Merchant: ~3×3 tiles, placed a bit further
+      final merchant = BuildingComponent(
+        buildingType: BuildingType.merchant,
+        gridCol: 8,
+        gridRow: 2,
+        buildingSize: Vector2(48, 48), // 3×3 tiles
+      );
+      _buildings.add(merchant);
+      world.add(merchant);
+
+      // ── Lyra the Oracle NPC ────────────────────────────────────
+      // Place her to the right of the merchant building
+      _lyraNpc = LyraNpcComponent(gridCol: 12, gridRow: 3);
+      world.add(_lyraNpc!);
+
+      // Set up camera.
+      _setupCamera();
+
+      // Sync weather visuals if a disaster was already active.
+      _weatherEffect?.setWeather(gameState.activeDisaster);
+    } catch (e, stack) {
+      developer.log(
+        'FATAL: onLoad failed — $e',
+        name: 'RichiFarmGame',
+        error: e,
+        stackTrace: stack,
+      );
+      // Game will render but remain empty. The error won't crash
+      // the update loop because all fields are nullable now.
     }
-
-    // Pre-cache crop sprites.
-    developer.log('Loading crop images...', name: 'RichiFarmGame');
-    await CropImageRegistry.loadAll();
-    developer.log('Crop images loaded', name: 'RichiFarmGame');
-
-    // ── Player character ──────────────────────────────────────
-    playerComponent = PlayerComponent();
-    playerComponent.position = Vector2((_mapWidth / 2) + 120, _mapHeight / 2);
-    playerComponent.mapWidth = _mapWidth;
-    playerComponent.mapHeight = _mapHeight;
-    world.add(playerComponent);
-
-    // Keyboard handler for crop interactions
-    add(InteractionKeyboardHandler());
-
-    // Joystick (always shown — on mobile it's the primary control,
-    // on desktop/web it's supplementary to WASD/arrow keys).
-    joystick = JoystickComponent(
-      knob: CircleComponent(
-        radius: 15,
-        paint: Paint()..color = const Color(0xFFFFFFFF),
-      ),
-      background: CircleComponent(
-        radius: 50,
-        paint: Paint()..color = const Color(0x88FFFFFF),
-      ),
-      margin: const EdgeInsets.only(left: 40, bottom: 40),
-    );
-    camera.viewport.add(joystick!);
-
-
-    // Weather effect overlay (renders behind joystick).
-    _weatherEffect = WeatherEffectComponent();
-    camera.viewport.add(_weatherEffect);
-
-    // Night overlay effect
-    final nightOverlay = NightOverlayComponent();
-    camera.viewport.add(nightOverlay);
-
-    // ── Buildings ──────────────────────────────────────────
-    // Bank: ~3×4 tiles, placed near top-left
-    final bank = BuildingComponent(
-      buildingType: BuildingType.bank,
-      gridCol: 2,
-      gridRow: 2,
-      buildingSize: Vector2(48, 64), // 3×4 tiles
-    );
-    _buildings.add(bank);
-    world.add(bank);
-
-    // Merchant: ~3×3 tiles, placed a bit further
-    final merchant = BuildingComponent(
-      buildingType: BuildingType.merchant,
-      gridCol: 8,
-      gridRow: 2,
-      buildingSize: Vector2(48, 48), // 3×3 tiles
-    );
-    _buildings.add(merchant);
-    world.add(merchant);
-
-    // ── Lyra the Oracle NPC ────────────────────────────────────
-    // Place her to the right of the merchant building
-    _lyraNpc = LyraNpcComponent(gridCol: 12, gridRow: 3);
-    world.add(_lyraNpc!);
-
-    // Set up camera.
-    _setupCamera();
-
-    // Sync weather visuals if a disaster was already active.
-    _weatherEffect.setWeather(gameState.activeDisaster);
   }
 
   // ── Weather visuals ────────────────────────────────────────
@@ -169,25 +202,28 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
   /// Update the weather visual overlay. Called by [GameState] when
   /// a disaster is triggered or cleared.
   void updateWeatherVisuals(DisasterType type) {
-    _weatherEffect.setWeather(type);
+    _weatherEffect?.setWeather(type);
   }
 
   @override
   void update(double dt) {
     super.update(dt);
+    // Guard: if onLoad failed, _mapComponent will be null
+    if (_mapComponent == null) return;
     _updateCamera();
   }
 
   void _updateCamera() {
+    final player = playerComponent;
+    if (player == null) return; // Not yet initialized
+
     if (gameState.isCameraFollow) {
       // Zoomed in, following player
       camera.viewfinder.zoom = 3.0; 
-      camera.viewfinder.position = playerComponent.position;
+      camera.viewfinder.position = player.position;
       _clampCamera();
     } else {
       // Full screen / static panned view
-      // Only set initial zoom if it hasn't been set or changed manually
-      // but for simplicity, we'll reset to cover scale if follow is turned off
       if (camera.viewfinder.zoom == 2.0) {
         _setupCamera(); 
       }
@@ -197,7 +233,7 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
   // ── Camera ──────────────────────────────────────────────────
 
   void _setupCamera() {
-    if (size.x <= 0 || size.y <= 0) return;
+    if (size.x <= 0 || size.y <= 0 || _mapWidth <= 0 || _mapHeight <= 0) return;
 
     // "Cover" zoom — use the LARGER axis scale so no black borders show.
     final scaleX = size.x / _mapWidth;
@@ -257,7 +293,7 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
 
   /// Convert a screen tap position to grid coordinates and select the tile.
   void handleTap(Offset screenPos) {
-    if (size.x <= 0 || size.y <= 0) return;
+    if (size.x <= 0 || size.y <= 0 || _mapComponent == null) return;
 
     final zoom = camera.viewfinder.zoom;
     if (zoom <= 0) return;
@@ -290,7 +326,9 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
       }
     }
 
-    final map = _mapComponent.tileMap.map;
+    final mapComp = _mapComponent;
+    if (mapComp == null) return;
+    final map = mapComp.tileMap.map;
     final mapCol = (worldX / 16).floor().clamp(0, map.width - 1);
     final mapRow = (worldY / 16).floor().clamp(0, map.height - 1);
 
@@ -386,7 +424,9 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
 
   /// Respawns the player to a safe space slightly right of the center of the map to prevent getting stuck.
   void respawnPlayer() {
-    playerComponent.position = Vector2((_mapWidth / 2) + 120, _mapHeight / 2);
+    final player = playerComponent;
+    if (player == null || _mapWidth <= 0) return;
+    player.position = Vector2((_mapWidth / 2) + 120, _mapHeight / 2);
     _setupCamera(); // Re-center the camera
     developer.log('Respawned player near map center.', name: 'RichiFarmGame');
   }
