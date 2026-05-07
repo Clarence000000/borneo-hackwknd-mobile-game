@@ -20,18 +20,12 @@ class ShadyLenderComponent extends SpriteComponent with HasGameRef<RichiFarmGame
 
     try {
       final image = await game.images.load('shady_lender.png');
-      final frameWidth = image.width / 3;
-      final frameHeight = image.height / 4;
 
-      // Pick the middle frame of the first row (standing pose).
-      sprite = Sprite(
-        image,
-        srcPosition: Vector2(frameWidth, 0),
-        srcSize: Vector2(frameWidth, frameHeight),
-      );
+      // New image is a single sprite — use the entire image.
+      sprite = Sprite(image);
 
-      // Match component size to the cropped frame size.
-      size = Vector2(frameWidth, frameHeight);
+      // Fixed NPC tile size (Flame auto-scales the sprite to fit).
+      size = Vector2(48, 48);
     } catch (e) {
       developer.log(
         'Failed to load ShadyLender sprite: shady_lender.png — $e',
@@ -42,7 +36,7 @@ class ShadyLenderComponent extends SpriteComponent with HasGameRef<RichiFarmGame
     // Render above crops (1) but below player (10).
     priority = 5;
 
-    add(RectangleHitbox());
+    add(RectangleHitbox(size: Vector2(48, 48)));
   }
 
   /// Check if a world-space point is inside this component's bounds.

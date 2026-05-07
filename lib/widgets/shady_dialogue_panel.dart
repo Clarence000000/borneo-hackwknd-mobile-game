@@ -239,28 +239,12 @@ class _ShadyDialoguePanelState extends State<ShadyDialoguePanel>
     );
   }
 
-  /// Build the NPC portrait by cropping the middle frame from the sprite sheet.
+  /// Build the NPC portrait from the single-sprite image.
   Widget _buildPortrait() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final size = constraints.biggest.shortestSide;
-        return SizedBox(
-          width: size,
-          height: size,
-          child: ClipRect(
-            child: OverflowBox(
-              maxWidth: size * 3,
-              maxHeight: size * 4,
-              alignment: const Alignment(0.0, -1.0),
-              child: Image.asset(
-                'assets/images/shady_lender.png',
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.none,
-              ),
-            ),
-          ),
-        );
-      },
+    return Image.asset(
+      'assets/images/shady_lender.png',
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.none,
     );
   }
 
