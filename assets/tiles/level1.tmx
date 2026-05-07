@@ -189,6 +189,6 @@
 </data>
  </layer>
  <objectgroup id="6" name="NPCs">
-  <object id="5" name="ShadyLender" x="205" y="57" width="55" height="52"/>
+  <object id="5" name="ShadyLender" x="493" y="127" width="55" height="52"/>
  </objectgroup>
 </map>

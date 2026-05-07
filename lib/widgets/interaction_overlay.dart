@@ -30,7 +30,8 @@ class InteractionOverlay extends StatelessWidget {
         if (state.interactableShadyLender != null) {
           final lender = state.interactableShadyLender!;
           options.add(_buildOption('F', 'Shady Lender', () {
-            game.overlays.add('ShadyLenderMenu');
+            state.showShadyDialogue = true;
+            state.refresh();
           }));
           worldPos = Vector2(lender.position.x + lender.size.x, lender.position.y + lender.size.y / 2);
         } else if (state.interactableBuilding != null) {

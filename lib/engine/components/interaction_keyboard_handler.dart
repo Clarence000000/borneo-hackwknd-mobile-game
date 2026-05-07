@@ -39,7 +39,8 @@ class InteractionKeyboardHandler extends Component
 
           // Check if distance is within interactable range (e.g., 64 pixels)
           if (distSq < 64 * 64) {
-            game.overlays.add('ShadyLenderMenu');
+            game.gameState.showShadyDialogue = true;
+            game.gameState.refresh();
             return true;
           }
         }

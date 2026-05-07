@@ -19,6 +19,7 @@ import 'package:farm_fintech/utils/currency_util.dart';
 import 'package:farm_fintech/services/seed_service.dart';
 import 'package:farm_fintech/screens/bank_screen.dart';
 import 'package:farm_fintech/screens/merchant_screen.dart';
+import 'package:farm_fintech/widgets/shady_dialogue_panel.dart';
 
 /// Main game screen — landscape farm view powered by Flame engine.
 ///
@@ -449,6 +450,10 @@ class _GameScreenState extends State<GameScreen> {
 
               // ── Layer 4: Interaction Overlay ────────────────
               InteractionOverlay(game: _game),
+
+              // ── Layer 5: Shady Lender Dialogue (topmost) ─────
+              if (state.showShadyDialogue)
+                ShadyDialoguePanel(game: _game),
             ],
           );
         },

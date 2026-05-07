@@ -85,6 +85,7 @@ class GameState extends ChangeNotifier {
   (int, int)? interactableTile;
   BuildingComponent? interactableBuilding;
   ShadyLenderComponent? interactableShadyLender;
+  bool showShadyDialogue = false;
   InteractionMenuState interactionMenuState = InteractionMenuState.main;
 
   void updateInteractableTile((int, int)? tile) {
