@@ -37,12 +37,13 @@ Future<void> main() async {
   );
 
   // Connect to Firebase Emulators in debug mode
+ /* 
   if (kDebugMode) {
-    const emulatorHost = 'localhost';
-    await FirebaseAuth.instance.useAuthEmulator(emulatorHost, 9099);
-    FirebaseFirestore.instance.useFirestoreEmulator(emulatorHost, 8080);
-    FirebaseFunctions.instance.useFunctionsEmulator(emulatorHost, 5001);
+    await FirebaseAuth.instance.useAuthEmulator('localhost', 9099);
+    FirebaseFirestore.instance.useFirestoreEmulator('localhost', 8081);
+    FirebaseFunctions.instance.useFunctionsEmulator('localhost', 5001);
   }
+  */
 
   runApp(const FarmFintechApp());
 }
