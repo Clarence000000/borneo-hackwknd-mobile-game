@@ -3,7 +3,7 @@ import 'dart:developer' as developer;
 import 'package:flame/components.dart';
 
 /// Type of building on the map.
-enum BuildingType { bank, merchant }
+enum BuildingType { bank, merchant, house }
 
 /// A static building placed on the farm map.
 ///
@@ -57,6 +57,8 @@ class BuildingComponent extends SpriteComponent {
         return 'bank.png';
       case BuildingType.merchant:
         return 'merchant.png';
+      case BuildingType.house:
+        return 'house.png';
     }
   }
 }

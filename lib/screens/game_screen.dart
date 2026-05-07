@@ -19,6 +19,7 @@ import 'package:farm_fintech/widgets/interaction_overlay.dart';
 import 'package:farm_fintech/utils/currency_util.dart';
 import 'package:farm_fintech/services/seed_service.dart';
 import 'package:farm_fintech/screens/bank_screen.dart';
+import 'package:farm_fintech/screens/house_screen.dart';
 import 'package:farm_fintech/screens/merchant_screen.dart';
 import 'package:farm_fintech/widgets/shady_dialogue_panel.dart';
 import 'package:farm_fintech/widgets/lyra_dialog_box.dart';
@@ -59,22 +60,30 @@ class _GameScreenState extends State<GameScreen> {
     _game = RichiFarmGame(gameState: state);
     state.game = _game; // Wire up so GameState can sync crop sprites
 
-    // Navigate to Bank/Merchant when the player taps a building.
+    // Navigate to the appropriate screen when the player taps a building.
     _game.onBuildingTapped = (BuildingType type) {
       if (!mounted) return;
-      showGeneralDialog(
-        context: context,
-        barrierDismissible: true,
-        barrierLabel: '',
-        pageBuilder: (context, anim1, anim2) {
-          switch (type) {
-            case BuildingType.bank:
-              return const BankScreen();
-            case BuildingType.merchant:
-              return const MerchantScreen();
-          }
-        },
-      );
+      switch (type) {
+        case BuildingType.house:
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const HouseScreen()),
+          );
+        case BuildingType.bank:
+          showGeneralDialog(
+            context: context,
+            barrierDismissible: true,
+            barrierLabel: '',
+            pageBuilder: (dialogCtx, anim1, anim2) => const BankScreen(),
+          );
+        case BuildingType.merchant:
+          showGeneralDialog(
+            context: context,
+            barrierDismissible: true,
+            barrierLabel: '',
+            pageBuilder: (dialogCtx, anim1, anim2) => const MerchantScreen(),
+          );
+      }
     };
 
     // Lyra: show dialog when tapped on the map
