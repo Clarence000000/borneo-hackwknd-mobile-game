@@ -335,12 +335,19 @@ class _HudOverlayState extends State<HudOverlay> {
                                 onTap: () => state.toggleCameraFollow(),
                               ),
                               _toolDivider(horizontal: true),
-                              _ToolIcon(
-                                icon: Icons.warning_amber,
-                                label: 'Chaos',
-                                color: Colors.deepPurple.shade600, // Brighter purple
-                                onTap: () => _showDisasterDialog(context, state),
-                              ),
+                                _ToolIcon(
+                                  icon: Icons.warning_amber,
+                                  label: 'Chaos',
+                                  color: Colors.deepPurple.shade600, // Brighter purple
+                                  onTap: () => _showDisasterDialog(context, state),
+                                ),
+                                _toolDivider(horizontal: true),
+                                _ToolIcon(
+                                  icon: Icons.terminal,
+                                  label: 'Dev Tools',
+                                  color: Colors.blueGrey.shade800,
+                                  onTap: () => _showDevToolsDialog(context, state),
+                                ),
                             ],
                           ),
                         ),
@@ -391,6 +398,24 @@ class _HudOverlayState extends State<HudOverlay> {
           _disasterButton('Flood', Colors.blue.shade900, () => state.triggerDisaster(DisasterType.flood)),
           _disasterButton('Storm', Colors.red.shade900, () => state.triggerDisaster(DisasterType.storm)),
           _disasterButton('Drought', Colors.orange.shade900, () => state.triggerDisaster(DisasterType.drought)),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: GoogleFonts.cinzel(color: Colors.grey.shade700, fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+  }
+
+  void _showDevToolsDialog(BuildContext context, GameState state) {
+    const textColor = Color(0xFF2D1B10);
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFFF4E4BC),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: Color(0xFF5D4037), width: 4)),
+        title: Text('Developer Tools', style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, color: textColor)),
+        content: Text('Realm administration options.', style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: textColor, fontSize: 18)),
+        actions: [
+          _disasterButton('Add 1000 Cash', Colors.green.shade900, () => state.devAddMoney(1000)),
+          _disasterButton('Remove All Plants', Colors.red.shade900, () => state.devRemoveAllPlants()),
           TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: GoogleFonts.cinzel(color: Colors.grey.shade700, fontWeight: FontWeight.bold))),
         ],
       ),

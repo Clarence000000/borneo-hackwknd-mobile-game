@@ -81,9 +81,22 @@ class InteractionOverlay extends StatelessWidget {
               options.add(_buildOption('F', 'Remove Plant', () => state.setInteractionMenuState(InteractionMenuState.confirmRemove)));
             }
           } else if (state.interactionMenuState == InteractionMenuState.plant) {
-            options.add(_buildOption('1', 'Wheat', () => state.plantCropInteraction(CropType.wheat)));
-            options.add(_buildOption('2', 'Paddy', () => state.plantCropInteraction(CropType.rice)));
-            options.add(_buildOption('3', 'Corn', () => state.plantCropInteraction(CropType.corn)));
+            final wheatSeeds = state.player?.inventory['wheat_seed'] ?? 0;
+            final riceSeeds = state.player?.inventory['rice_seed'] ?? 0;
+            final cornSeeds = state.player?.inventory['corn_seed'] ?? 0;
+
+            options.add(Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: Text('Select crop to plant', 
+                style: GoogleFonts.cinzel(color: const Color(0xFFC5A021), fontWeight: FontWeight.w900, fontSize: 16)),
+            ));
+            
+            options.add(const SizedBox(height: 8));
+
+            options.add(_buildOption('1', 'Wheat ($wheatSeeds)', wheatSeeds >= 1 ? () => state.plantCropInteraction(CropType.wheat) : null));
+            options.add(_buildOption('2', 'Paddy ($riceSeeds)', riceSeeds >= 1 ? () => state.plantCropInteraction(CropType.rice) : null));
+            options.add(_buildOption('3', 'Corn ($cornSeeds)', cornSeeds >= 1 ? () => state.plantCropInteraction(CropType.corn) : null));
+            options.add(_buildOption('ESC', 'Back', () => state.setInteractionMenuState(InteractionMenuState.main)));
           } else if (state.interactionMenuState == InteractionMenuState.harvest) {
             options.add(_buildOption('1', 'Store', () => state.harvestCropInteraction(sell: false)));
             options.add(_buildOption('2', 'Sell', () => state.harvestCropInteraction(sell: true)));
@@ -102,13 +115,7 @@ class InteractionOverlay extends StatelessWidget {
         if (playerComp == null) return const SizedBox.shrink();
         final playerScreenPos = game.camera.viewfinder.localToGlobal(playerComp.position);
         
-        // Decide whether to show box on the left or right of the tile
-        // to avoid the player character.
         bool showOnRight = screenPos.x > playerScreenPos.x;
-        // If tile is to the right of player, show box to the right.
-        // If tile is to the left of player, show box to the left.
-        // If they are on same tile, default to right but offset more.
-        
         final size = MediaQuery.of(context).size;
         double leftPos;
         if (showOnRight) {
@@ -140,7 +147,7 @@ class InteractionOverlay extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: leatherBorder, width: 3),
                 boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(4, 4)),
+                  BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 8, offset: const Offset(4, 4)),
                 ],
               ),
               child: Stack(
@@ -165,39 +172,36 @@ class InteractionOverlay extends StatelessWidget {
     );
   }
 
-  Widget _buildOption(String keyLabel, String label, VoidCallback onTap) {
-    final displayKey = keyLabel == 'F' ? keyLabel : '$keyLabel.';
-    const highlightColor = Color(0xFFC5A021); // The new darker gold
-    const textColor = Color(0xFF2D1B10);
-
-    return InkWell(
+  Widget _buildOption(String key, String label, VoidCallback? onTap) {
+    return GestureDetector(
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6.0),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: onTap == null ? Colors.grey.withOpacity(0.2) : Colors.white.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(4),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: const Color(0xFF5D4037).withValues(alpha: 0.1),
+                color: onTap == null ? Colors.grey : const Color(0xFF5D4037),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                displayKey,
-                style: GoogleFonts.cinzel(
-                  color: highlightColor,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 14,
-                ),
+                key,
+                style: GoogleFonts.cinzel(color: const Color(0xFFF4E4BC), fontSize: 12, fontWeight: FontWeight.w900),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Text(
               label,
               style: GoogleFonts.almendra(
-                color: textColor,
-                fontSize: 15,
+                color: onTap == null ? Colors.grey.shade700 : const Color(0xFF2D1B10),
+                fontSize: 14,
                 fontWeight: FontWeight.bold,
               ),
             ),

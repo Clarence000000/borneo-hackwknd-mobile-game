@@ -91,6 +91,18 @@ class GameState extends ChangeNotifier {
   bool isNearLyra = false;
   InteractionMenuState interactionMenuState = InteractionMenuState.main;
   List<Map<String, String>> chatHistory = [];
+  
+  // ── Notifications ───────────────────────────────────────────
+  final List<NotificationItem> notifications = [];
+  void addNotification(String message, {IconData icon = Icons.info_outline, Color color = const Color(0xFF5D4037)}) {
+    final item = NotificationItem(message: message, icon: icon, color: color);
+    notifications.add(item);
+    notifyListeners();
+    Future.delayed(const Duration(seconds: 4), () {
+      notifications.remove(item);
+      notifyListeners();
+    });
+  }
 
   Quest? activeQuest;
 
@@ -215,6 +227,10 @@ class GameState extends ChangeNotifier {
     }
   }
 
+  void handleInteractionAction(String action) {
+    // Selection navigation logic can be added here if needed
+  }
+
   Future<void> plantCropInteraction(CropType type) async {
     // Temporary override selectedTile for plantCrop to work
     final oldSelected = selectedTile;
@@ -325,7 +341,7 @@ class GameState extends ChangeNotifier {
   bool get autoHarvestEnabled => player?.autoHarvestEnabled ?? false;
   int get fertilizerPackCount => player?.fertilizerPackCount ?? 0;
 
-  bool _isCameraFollow = false;
+  bool _isCameraFollow = true;
   bool get isCameraFollow => _isCameraFollow;
 
   void updateQuestProgress(QuestType type, double amount, {CropType? crop}) {
@@ -818,6 +834,57 @@ class GameState extends ChangeNotifier {
 
   // handleTap is now in RichiFarmGame.handleTap() — it calls selectTile().
 
+  /// Buy seeds from merchant
+  Future<bool> buySeeds(CropType type, int quantity) async {
+    if (player == null) return false;
+    final config = kCropConfig[type]!;
+    final cost = (config['seedCost'] as double) * quantity;
+
+    if (player!.cashBalance + player!.bankBalance < cost) return false;
+
+    if (player!.cashBalance >= cost) {
+      player!.pay(cost, method: PaymentMethod.cash);
+    } else {
+      player!.pay(cost, method: PaymentMethod.bank);
+    }
+    _addMonthlyExpense('seed', cost);
+
+    final seedKey = '${type.name}_seed';
+    final current = player!.inventory[seedKey] ?? 0;
+    player!.inventory[seedKey] = current + quantity;
+
+    try {
+      await _savePlayerState();
+      notifyListeners();
+      addNotification('Bought $quantity x ${config['name']} Seeds', icon: Icons.shopping_bag, color: Colors.green.shade700);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Developer Option: Add Money
+  Future<void> devAddMoney(double amount) async {
+    if (player == null) return;
+    player!.cashBalance += amount;
+    await _savePlayerState();
+    notifyListeners();
+  }
+
+  /// Developer Option: Remove All Plants
+  Future<void> devRemoveAllPlants() async {
+    for (final row in grid) {
+      for (final tile in row) {
+        tile.crop = null;
+        tile.farmState = FarmPlotState.idle;
+        tile.growthStage = 0;
+      }
+    }
+    await _saveGridState();
+    game?.syncCropsFromGameState();
+    notifyListeners();
+  }
+
   /// Plant a crop on the selected tile.
   Future<bool> plantCrop(CropType cropType) async {
     if (selectedTile == null || player == null) return false;
@@ -825,25 +892,20 @@ class GameState extends ChangeNotifier {
     final (col, row) = selectedTile!;
     final tile = grid[row][col];
     final config = kCropConfig[cropType]!;
-    final cost = config['seedCost'] as double;
-
-    // Check balance
-    if (player!.cashBalance < cost && player!.bankBalance < cost) {
+    final seedKey = '${cropType.name}_seed';
+    
+    // Check inventory for seeds
+    final seedCount = player!.inventory[seedKey] ?? 0;
+    if (seedCount <= 0) {
       return false;
     }
 
     if (!tile.plant(cropType, currentDay: currentDay)) return false;
 
-    final previousCashBalance = player!.cashBalance;
-    final previousBankBalance = player!.bankBalance;
+    // Consume 1 seed
+    player!.inventory[seedKey] = seedCount - 1;
 
-    // Deduct cost (prefer cash first)
-    if (player!.cashBalance >= cost) {
-      player!.pay(cost, method: PaymentMethod.cash);
-    } else {
-      player!.pay(cost, method: PaymentMethod.bank);
-    }
-    _addMonthlyExpense('seed', cost);
+    // Removed direct deduction and monthly expense for seed since it's now bought from merchant
 
     try {
       await _savePlayerState();
@@ -859,9 +921,7 @@ class GameState extends ChangeNotifier {
       tile.plantedDay = null;
       tile.readyDay = null;
       tile.farmState = FarmPlotState.idle;
-      player!.cashBalance = previousCashBalance;
-      player!.bankBalance = previousBankBalance;
-      _addMonthlyExpense('seed', -cost);
+      player!.inventory[seedKey] = seedCount; // Restore seed
       return false;
     }
   }
@@ -966,6 +1026,7 @@ class GameState extends ChangeNotifier {
     try {
       await _savePlayerState();
       notifyListeners();
+      addNotification('Successfully purchased equipment!', icon: Icons.shopping_cart, color: Colors.blue.shade700);
       return true;
     } catch (_) {
       player!.cashBalance = previousCashBalance;
@@ -1044,6 +1105,7 @@ class GameState extends ChangeNotifier {
       );
 
       notifyListeners();
+      addNotification('BNPL Purchase Successful!', icon: Icons.credit_card, color: Colors.orange.shade700);
       return true;
     } catch (e) {
       debugPrint('purchaseWithBnpl error: $e');
@@ -1515,4 +1577,12 @@ class MonthlyPnLReport {
         return 'N/A';
     }
   }
+}
+
+class NotificationItem {
+  final String id = DateTime.now().millisecondsSinceEpoch.toString();
+  final String message;
+  final IconData icon;
+  final Color color;
+  NotificationItem({required this.message, required this.icon, required this.color});
 }

@@ -15,6 +15,7 @@ import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/screens/game_screen.dart';
 import 'package:farm_fintech/screens/login_screen.dart';
 import 'package:farm_fintech/services/firestore_service.dart';
+import 'package:farm_fintech/widgets/notification_overlay.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -60,6 +61,14 @@ class FarmFintechApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: GameTheme.darkTheme,
         home: const _EntryPoint(),
+        builder: (context, child) {
+          return Stack(
+            children: [
+              child!,
+              const NotificationOverlay(),
+            ],
+          );
+        },
       ),
     );
   }

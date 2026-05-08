@@ -149,15 +149,21 @@ class MerchantScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Expanded(
-                child: ListView.builder(
-                  itemCount: _equipmentCatalog.length,
-                  itemBuilder: (context, index) {
-                    return _EquipmentCard(
-                      equipment: _equipmentCatalog[index],
+                child: ListView(
+                  children: [
+                    _SeedShopSection(player: player, state: state),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Royal Equipment',
+                      style: GoogleFonts.cinzel(color: const Color(0xFF2D1B10), fontWeight: FontWeight.w900, fontSize: 24),
+                    ),
+                    const SizedBox(height: 12),
+                    ..._equipmentCatalog.map((eq) => _EquipmentCard(
+                      equipment: eq,
                       player: player,
                       state: state,
-                    );
-                  },
+                    )),
+                  ],
                 ),
               ),
             ],
@@ -176,13 +182,13 @@ class MerchantScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              _InventorySection(player: player),
+              Expanded(child: _InventorySection(player: player)),
             ],
           ),
 
           // ── Page 4: Market Sell Actions ────────────────
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          ListView(
+            padding: EdgeInsets.zero,
             children: [
               Text(
                 'Trading Floor',
@@ -222,12 +228,19 @@ class _BnplPlanCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isOverdue ? Colors.red.withOpacity(0.1) : Colors.white.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(10),
+        color: isOverdue ? const Color(0xFFFFEBEE) : const Color(0xFFFDF5E6).withOpacity(0.5), // Soft parchment/cream
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isOverdue ? Colors.red.shade900 : const Color(0xFF5D4037).withOpacity(0.4),
+          color: isOverdue ? const Color(0xFFB71C1C) : const Color(0xFF8D6E63),
           width: 2,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -237,10 +250,10 @@ class _BnplPlanCard extends StatelessWidget {
               Text(plan.itemName, 
                    style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, fontSize: 16, color: textColor)),
               Text('${CurrencyUtil.format(plan.monthlyAmount, player.country)}/mo', 
-                   style: GoogleFonts.almendra(fontWeight: FontWeight.w900, fontSize: 16, color: Colors.orange.shade900)),
+                   style: GoogleFonts.almendra(fontWeight: FontWeight.w900, fontSize: 16, color: const Color(0xFFBF360C))), // Deep orange
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -252,6 +265,7 @@ class _BnplPlanCard extends StatelessWidget {
                   backgroundColor: const Color(0xFF5D4037),
                   foregroundColor: const Color(0xFFF4E4BC),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
                 child: Text('Repay Cash', style: GoogleFonts.cinzel(fontSize: 12, fontWeight: FontWeight.bold)),
               ),
@@ -318,9 +332,16 @@ class _EquipmentCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF5D4037).withOpacity(0.4), width: 2),
+        color: const Color(0xFFFDF5E6).withOpacity(0.4), // Creamy parchment
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF5D4037), width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -341,6 +362,8 @@ class _EquipmentCard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 4),
+          _buildOwnedCount(textColor),
           const SizedBox(height: 8),
           Text(
             equipment.description,
@@ -382,20 +405,41 @@ class _EquipmentCard extends StatelessWidget {
                       context: context,
                       builder: (ctx) => AlertDialog(
                         backgroundColor: const Color(0xFFF4E4BC),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFF5D4037), width: 2)),
                         title: Text('BNPL Purchase',
-                          style: GoogleFonts.cinzel(color: const Color(0xFF2D1B10), fontWeight: FontWeight.bold)),
-                        content: Text(
-                          '${equipment.name} — ${CurrencyUtil.format(equipment.price, player.country)}\n\n'
-                          'Pay in 3 installments of ${CurrencyUtil.format(equipment.price / 3, player.country)}/month.\n\n'
-                          'Miss a payment and you\'ll be charged late fees!',
-                          style: GoogleFonts.almendra(fontWeight: FontWeight.bold),
+                          style: GoogleFonts.cinzel(color: const Color(0xFF2D1B10), fontWeight: FontWeight.w900, fontSize: 22)),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${equipment.name} — ${CurrencyUtil.format(equipment.price, player.country)}',
+                              style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10), fontSize: 16),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Pay in 3 installments of ${CurrencyUtil.format(equipment.price / 3, player.country)}/month.',
+                              style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10), fontSize: 14),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Miss a payment and you\'ll be charged late fees!',
+                              style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: const Color(0xFFBF360C), fontSize: 14, fontStyle: FontStyle.italic),
+                            ),
+                          ],
                         ),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: Text('Cancel', style: GoogleFonts.cinzel(color: const Color(0xFF5D4037), fontWeight: FontWeight.bold)),
+                          ),
                           ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D4037)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF5D4037),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
                             onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text('Confirm BNPL', style: TextStyle(color: Colors.white)),
+                            child: Text('CONFIRM BNPL', style: GoogleFonts.cinzel(color: const Color(0xFFF4E4BC), fontWeight: FontWeight.bold)),
                           ),
                         ],
                       ),
@@ -419,14 +463,35 @@ class _EquipmentCard extends StatelessWidget {
                   },
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Color(0xFF5D4037), width: 2),
+                    foregroundColor: const Color(0xFF2D1B10),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
-                  child: Text('BNPL 3X', style: GoogleFonts.cinzel(fontSize: 14, fontWeight: FontWeight.w900, color: const Color(0xFF5D4037))),
+                  child: Text('BUY (BNPL)',
+                      style: GoogleFonts.cinzel(
+                          fontSize: 14, fontWeight: FontWeight.w900)),
                 ),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildOwnedCount(Color textColor) {
+    String text = 'Owned: 0';
+    if (equipment.name == 'Tractor') {
+      text = player.tractorOwned ? 'Owned' : 'Not Owned';
+    } else if (equipment.name == 'Fertilizer Pack') {
+      text = 'Owned: ${player.fertilizerPackCount}';
+    }
+    
+    return Text(
+      text,
+      style: GoogleFonts.almendra(
+        fontSize: 14,
+        fontWeight: FontWeight.bold,
+        color: textColor.withOpacity(0.8),
       ),
     );
   }
@@ -440,34 +505,48 @@ class _InventorySection extends StatelessWidget {
   Widget build(BuildContext context) {
     const textColor = Color(0xFF2D1B10);
     final items = player.inventory.entries.where((e) => e.value > 0).toList();
-    if (items.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.only(top: 40),
-          child: Text(
-            'Inventory is empty.',
-            style: GoogleFonts.almendra(fontSize: 20, fontWeight: FontWeight.bold, color: textColor.withOpacity(0.6)),
-          ),
-        ),
-      );
-    }
+    final hasTractor = player.tractorOwned;
+    final fertCount = player.fertilizerPackCount;
     
-    return Column(
-      children: items.map((e) => Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(e.key.toUpperCase(), style: GoogleFonts.cinzel(fontSize: 18, fontWeight: FontWeight.w900, color: textColor)),
-            Text('x${e.value}', style: GoogleFonts.almendra(fontSize: 22, fontWeight: FontWeight.w900, color: textColor)),
-          ],
-        ),
-      )).toList(),
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        if (items.isNotEmpty) ...[
+          Text('Crop Harvest', style: GoogleFonts.cinzel(fontSize: 20, fontWeight: FontWeight.w900, color: textColor)),
+          const SizedBox(height: 8),
+          ...items.map((e) => _buildInventoryItem(e.key.toUpperCase(), 'x${e.value}', textColor)),
+          const SizedBox(height: 24),
+        ],
+        
+        Text('Royal Assets', style: GoogleFonts.cinzel(fontSize: 20, fontWeight: FontWeight.w900, color: textColor)),
+        const SizedBox(height: 8),
+        if (hasTractor) _buildInventoryItem('TRACTOR', 'OWNED', textColor),
+        if (fertCount > 0) _buildInventoryItem('FERTILIZER', 'x$fertCount', textColor),
+        if (!hasTractor && fertCount == 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text('No royal equipment owned.', style: GoogleFonts.almendra(fontSize: 16, color: textColor.withOpacity(0.6))),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildInventoryItem(String title, String trailing, Color textColor) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFDF5E6).withOpacity(0.3),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF5D4037).withOpacity(0.2)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(title, style: GoogleFonts.cinzel(fontSize: 16, fontWeight: FontWeight.w900, color: textColor)),
+          Text(trailing, style: GoogleFonts.almendra(fontSize: 18, fontWeight: FontWeight.w900, color: textColor)),
+        ],
+      ),
     );
   }
 }
@@ -532,4 +611,94 @@ BnplPlan __createBnplPlan(
     nextDueDate: DateTime.now().add(const Duration(days: kGameDaysPerMonth)),
     nextDueDay: currentDay + kGameDaysPerMonth,
   );
+}
+
+class _SeedShopSection extends StatelessWidget {
+  final Player player;
+  final GameState state;
+  const _SeedShopSection({required this.player, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    const textColor = Color(0xFF2D1B10);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Seed Market',
+          style: GoogleFonts.cinzel(
+            color: textColor,
+            fontWeight: FontWeight.w900,
+            fontSize: 24,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.start,
+          children: [
+            _SeedCard(type: CropType.wheat, player: player, state: state),
+            _SeedCard(type: CropType.rice, player: player, state: state),
+            _SeedCard(type: CropType.corn, player: player, state: state),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _SeedCard extends StatelessWidget {
+  final CropType type;
+  final Player player;
+  final GameState state;
+  const _SeedCard({required this.type, required this.player, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final config = kCropConfig[type]!;
+    final price = config['seedCost'] as double;
+    final name = config['name'] as String; // Use configured name (Wheat, Paddy, Corn)
+    final seedKey = '${type.name}_seed';
+    final owned = player.inventory[seedKey] ?? 0;
+    
+    // Map CropType to asset name
+    String assetName;
+    switch(type) {
+      case CropType.wheat: assetName = 'wheat'; break;
+      case CropType.rice: assetName = 'rice'; break;
+      case CropType.corn: assetName = 'corn'; break;
+    }
+
+    return Container(
+      width: 110,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF5D4037).withOpacity(0.4), width: 2),
+      ),
+      child: Column(
+        children: [
+          Image.asset('assets/images/crops/${assetName}_3.png', width: 32, height: 32, filterQuality: FilterQuality.none),
+          const SizedBox(height: 4),
+          Text(name, style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, fontSize: 14, color: const Color(0xFF2D1B10))),
+          const SizedBox(height: 2),
+          Text(CurrencyUtil.format(price, player.country), style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
+          Text('Own: $owned', style: GoogleFonts.almendra(fontSize: 12, color: const Color(0xFF2D1B10))),
+          const SizedBox(height: 8),
+          ElevatedButton(
+            onPressed: () => state.buySeeds(type, 1),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF5D4037),
+              foregroundColor: const Color(0xFFF4E4BC),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              minimumSize: const Size(60, 30),
+            ),
+            child: Text('BUY 1', style: GoogleFonts.cinzel(fontSize: 10, fontWeight: FontWeight.w900)),
+          ),
+        ],
+      ),
+    );
+  }
 }

@@ -53,6 +53,16 @@ class InteractionKeyboardHandler extends Component
       gameState.handleInteractionKey(3);
     } else if (keysPressed.contains(LogicalKeyboardKey.escape)) {
       gameState.setInteractionMenuState(InteractionMenuState.main);
+    } else if (keysPressed.contains(LogicalKeyboardKey.keyW) || keysPressed.contains(LogicalKeyboardKey.arrowUp)) {
+      gameState.handleInteractionAction('UP');
+    } else if (keysPressed.contains(LogicalKeyboardKey.keyS) || keysPressed.contains(LogicalKeyboardKey.arrowDown)) {
+      gameState.handleInteractionAction('DOWN');
+    } else if (keysPressed.contains(LogicalKeyboardKey.keyA) || keysPressed.contains(LogicalKeyboardKey.arrowLeft)) {
+      gameState.handleInteractionAction('LEFT');
+    } else if (keysPressed.contains(LogicalKeyboardKey.keyD) || keysPressed.contains(LogicalKeyboardKey.arrowRight)) {
+      gameState.handleInteractionAction('RIGHT');
+    } else if (keysPressed.contains(LogicalKeyboardKey.enter) || keysPressed.contains(LogicalKeyboardKey.space)) {
+      gameState.handleInteractionAction('CONFIRM');
     }
 
     return true;
