@@ -216,14 +216,30 @@ Farmer ${player.displayName} now asks: "$userMessage"
   }
 
   /// Generate a new logically sound quest for the player.
-  /// Pass [disasterContext] to generate an urgent/delivery market demand quest.
+  /// Pass [disasterContext] for an urgent market demand quest.
+  /// Pass [locationContext] for a location exploration quest.
   Future<Quest> generateQuest({
     required Player player,
     required int currentDay,
     required int activeBnplCount,
     String? disasterContext,
+    String? locationContext,
   }) async {
     if (!_initialized) {
+      if (locationContext != null) {
+        return Quest(
+          id: 'q-${DateTime.now().millisecondsSinceEpoch}',
+          title: 'Forest Expedition',
+          description: 'The Oracle of the Wild Forest awaits you. Visit the forest and speak with her.',
+          type: QuestType.location,
+          goalAmount: 1,
+          targetLocation: 'wild_forest',
+          startDay: currentDay,
+          durationDays: 3,
+          cost: 50,
+          reward: 300,
+        );
+      }
       return Quest(
         id: 'q-${DateTime.now().millisecondsSinceEpoch}',
         title: disasterContext != null ? 'Emergency Delivery' : 'Simple Harvest',
@@ -249,6 +265,14 @@ Set reward to exactly 3 times the cost.
 '''
         : '';
 
+    final locationEvent = locationContext != null
+        ? '''
+LOCATION EVENT: $locationContext
+Generate a quest with type "location" and targetLocation "wild_forest".
+Set goalAmount to 1. Set durationDays to 3.
+'''
+        : '';
+
     final prompt = '''
 You are Lyra, a literature student and financial advisor. Generate a CHALLENGING but FAIR quest for this farmer.
 The quest should encourage wise use of BNPL or Loans to grow the farm.
@@ -257,14 +281,15 @@ Farmer: ${player.displayName}
 Day: $currentDay
 Cash: ${player.cashBalance}
 Credit: ${player.creditScore}
-$marketEvent
+$marketEvent$locationEvent
 Output ONLY this exact JSON format:
 {
   "title": "Short catchy title",
   "description": "Short explanation of the challenge",
-  "type": "harvest" OR "cash" OR "delivery" OR "urgent",
+  "type": "harvest" OR "cash" OR "delivery" OR "urgent" OR "location",
   "goalAmount": number,
-  "targetCrop": "wheat" OR "rice" OR "corn" (null if type is cash),
+  "targetCrop": "wheat" OR "rice" OR "corn" (null if type is cash or location),
+  "targetLocation": "wild_forest" (only if type is location, otherwise null),
   "durationDays": number (2-5, or 1-2 if urgent),
   "cost": number (payment to start),
   "reward": number (2x to 4x of cost, or exactly 3x if urgent/delivery)
@@ -274,7 +299,6 @@ Output ONLY this exact JSON format:
     try {
       final response = await _model.generateContent([Content.text(prompt)]);
       final text = response.text ?? '';
-      // Simple extraction of JSON between curly braces
       final jsonStart = text.indexOf('{');
       final jsonEnd = text.lastIndexOf('}') + 1;
       if (jsonStart >= 0 && jsonEnd > jsonStart) {
@@ -288,6 +312,7 @@ Output ONLY this exact JSON format:
             type: _parseQuestType(map['type']),
             goalAmount: (map['goalAmount'] as num?)?.toDouble() ?? 5.0,
             targetCrop: map['targetCrop'] != null ? _parseCropType(map['targetCrop']) : null,
+            targetLocation: map['targetLocation'] as String?,
             startDay: currentDay,
             durationDays: (map['durationDays'] as num?)?.toInt() ?? 3,
             cost: (map['cost'] as num?)?.toDouble() ?? 100.0,
@@ -328,6 +353,7 @@ Output ONLY this exact JSON format:
       case 'cash': return QuestType.cash;
       case 'delivery': return QuestType.delivery;
       case 'urgent': return QuestType.urgent;
+      case 'location': return QuestType.location;
       default: return QuestType.harvest;
     }
   }

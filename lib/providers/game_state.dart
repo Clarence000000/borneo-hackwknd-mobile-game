@@ -329,8 +329,24 @@ class GameState extends ChangeNotifier {
   bool _isCameraFollow = false;
   bool get isCameraFollow => _isCameraFollow;
 
-  void updateQuestProgress(QuestType type, double amount, {CropType? crop}) {
+  final Set<String> visitedLocations = {};
+
+  void visitLocation(String locationId) {
+    visitedLocations.add(locationId);
+    updateQuestProgress(QuestType.location, 1.0, location: locationId);
+  }
+
+  void updateQuestProgress(QuestType type, double amount, {CropType? crop, String? location}) {
     if (activeQuest == null || activeQuest!.status != QuestStatus.active) return;
+
+    if (type == QuestType.location) {
+      if (activeQuest!.type != QuestType.location) return;
+      if (activeQuest!.targetLocation != location) return;
+      activeQuest!.currentProgress = activeQuest!.goalAmount;
+      notifyListeners();
+      return;
+    }
+
     // delivery and urgent quests count harvest actions as progress
     final activeType = activeQuest!.type;
     final isHarvestLike = activeType == QuestType.delivery || activeType == QuestType.urgent;
