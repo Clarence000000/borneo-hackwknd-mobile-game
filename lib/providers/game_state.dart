@@ -18,6 +18,7 @@ import 'package:farm_fintech/services/firestore_service.dart';
 import 'package:farm_fintech/services/weather_service.dart';
 import 'package:farm_fintech/engine/components/building_component.dart';
 import 'package:farm_fintech/engine/components/shady_lender_component.dart';
+import 'package:farm_fintech/services/gemini_service.dart';
 
 enum InteractionMenuState { main, plant, harvest, confirmRemove, lyra }
 
@@ -330,8 +331,11 @@ class GameState extends ChangeNotifier {
 
   void updateQuestProgress(QuestType type, double amount, {CropType? crop}) {
     if (activeQuest == null || activeQuest!.status != QuestStatus.active) return;
-    if (activeQuest!.type != type) return;
-    if (type == QuestType.harvest && activeQuest!.targetCrop != crop) return;
+    // delivery and urgent quests count harvest actions as progress
+    final activeType = activeQuest!.type;
+    final isHarvestLike = activeType == QuestType.delivery || activeType == QuestType.urgent;
+    if (activeType != type && !(type == QuestType.harvest && isHarvestLike)) return;
+    if ((type == QuestType.harvest || isHarvestLike) && activeQuest!.targetCrop != crop) return;
 
     activeQuest!.currentProgress += amount;
     if (activeQuest!.currentProgress >= activeQuest!.goalAmount) {
@@ -1450,6 +1454,7 @@ class GameState extends ChangeNotifier {
     game?.updateWeatherVisuals(type);
     notifyListeners();
     _saveGridState(); // Persist disaster damage
+    _maybeGenerateDisasterQuest(type);
     return destroyed;
   }
 
@@ -1457,6 +1462,27 @@ class GameState extends ChangeNotifier {
   void clearDisaster() {
     activeDisaster = DisasterType.none;
     game?.updateWeatherVisuals(DisasterType.none);
+    notifyListeners();
+  }
+
+  /// Auto-generate an urgent market demand quest when a disaster hits.
+  Future<void> _maybeGenerateDisasterQuest(DisasterType type) async {
+    if (activeQuest != null || player == null || type == DisasterType.none) return;
+
+    const contexts = {
+      DisasterType.flood:   'A flood has devastated nearby paddy fields — rice is scarce!',
+      DisasterType.storm:   'A storm in the neighboring realm ruined their wheat harvest!',
+      DisasterType.drought: 'A drought is drying up corn supplies across the region!',
+    };
+
+    final quest = await GeminiService().generateQuest(
+      player: player!,
+      currentDay: currentDay,
+      activeBnplCount: bnplPlans.length,
+      disasterContext: contexts[type],
+    );
+
+    activeQuest = quest;
     notifyListeners();
   }
 

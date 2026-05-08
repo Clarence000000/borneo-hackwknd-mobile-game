@@ -1,6 +1,6 @@
 import 'package:farm_fintech/config/constants.dart';
 
-enum QuestType { harvest, cash }
+enum QuestType { harvest, cash, delivery, urgent }
 enum QuestStatus { active, completed, failed }
 
 class Quest {

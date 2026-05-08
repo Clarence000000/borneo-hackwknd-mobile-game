@@ -130,7 +130,9 @@ class _LyraDialogBoxState extends State<LyraDialogBox>
       _showingQuest = true;
     });
 
-    final text = "I have a challenge for you: '${quest.title}'. ${quest.description} It will cost you ${quest.cost.toInt()} gold to enter, but you could earn ${quest.reward.toInt()}! Do you accept?";
+    final isUrgent = quest.type == QuestType.urgent || quest.type == QuestType.delivery;
+    final urgencyPrefix = isUrgent ? "URGENT — The market is in crisis! " : "";
+    final text = "${urgencyPrefix}I have a challenge for you: '${quest.title}'. ${quest.description} It will cost you ${quest.cost.toInt()} gold to enter, but you could earn ${quest.reward.toInt()}! Do you accept?";
     _typeOutText(text);
   }
 
