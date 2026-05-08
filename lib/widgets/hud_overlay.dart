@@ -37,7 +37,8 @@ const _currencyToUsdRate = {
 const _aseanCountries = ['MY', 'ID', 'SG', 'TH', 'PH', 'VN'];
 
 class HudOverlay extends StatefulWidget {
-  const HudOverlay({super.key});
+  final bool showTools;
+  const HudOverlay({super.key, this.showTools = true});
 
   @override
   State<HudOverlay> createState() => _HudOverlayState();
@@ -239,6 +240,7 @@ class _HudOverlayState extends State<HudOverlay> {
                 ),
 
                 // ── Bottom Right: Unified Tools Menu ──────────
+                if (widget.showTools)
                 Align(
                   alignment: Alignment.bottomRight,
                   child: Column(

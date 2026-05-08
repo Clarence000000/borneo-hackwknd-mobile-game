@@ -203,10 +203,8 @@ class ForestGame extends FlameGame
 
   void _setupCamera() {
     if (size.x <= 0 || size.y <= 0) return;
-    final scaleX = size.x / _mapWidth;
-    final scaleY = size.y / _mapHeight;
-    camera.viewfinder.zoom = scaleX > scaleY ? scaleX : scaleY;
-    camera.viewfinder.position = Vector2(_mapWidth / 2, _mapHeight / 2);
+    camera.viewfinder.zoom = 3.0;
+    camera.viewfinder.position = _player.position;
     _clampCamera();
   }
 
@@ -226,9 +224,7 @@ class ForestGame extends FlameGame
 
   @override
   void onPanUpdate(DragUpdateInfo info) {
-    final zoom = camera.viewfinder.zoom;
-    camera.viewfinder.position -= info.delta.global / zoom;
-    _clampCamera();
+    // Camera follows player — pan is handled in update(); swipe gestures are ignored.
   }
 
   @override

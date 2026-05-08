@@ -7,6 +7,7 @@ import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/engine/forest_game.dart';
 import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/widgets/forest_npc_dialogue_panel.dart';
+import 'package:farm_fintech/widgets/hud_overlay.dart';
 
 /// Full-screen view of the Wild Forest area.
 ///
@@ -89,65 +90,8 @@ class _ForestScreenState extends State<ForestScreen> {
             child: GameWidget(game: _game),
           ),
 
-          // ── Back button ──────────────────────────────────────
-          SafeArea(
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: TextButton.icon(
-                  onPressed: _exitToFarm,
-                  icon: const Icon(Icons.arrow_back,
-                      color: GameColors.uiText, size: 18),
-                  label: const Text(
-                    'Farm',
-                    style: TextStyle(color: GameColors.uiText, fontSize: 14),
-                  ),
-                  style: TextButton.styleFrom(
-                    backgroundColor: GameColors.uiPanel.withValues(alpha: 0.85),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: BorderSide(
-                        color: GameColors.uiAccent.withValues(alpha: 0.5),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // ── Location label ───────────────────────────────────
-          SafeArea(
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A3320).withValues(alpha: 0.85),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: const Color(0xFF4A7C59).withValues(alpha: 0.6),
-                    ),
-                  ),
-                  child: const Text(
-                    '🌲 The Wild Forest',
-                    style: TextStyle(
-                      color: Color(0xFFD4C99A),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
+          // ── HUD (cash, credit score, weather, day timer — no tools) ──
+          const HudOverlay(showTools: false),
 
           // ── NPC proximity overlay ────────────────────────────
           if (_nearNpcName != null && !_dialogueOpen)
