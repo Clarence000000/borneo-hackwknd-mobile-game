@@ -183,4 +183,18 @@ class FirestoreService {
     }
     return grid;
   }
+
+  /// Reset utilities for Developer Tools
+  Future<void> clearBnplPlans(String uid) => _clearSubcollection(uid, 'bnplPlans');
+  Future<void> clearInsurancePolicies(String uid) => _clearSubcollection(uid, 'insurancePolicies');
+  Future<void> clearBankAccounts(String uid) => _clearSubcollection(uid, 'bankAccounts');
+
+  Future<void> _clearSubcollection(String uid, String subName) async {
+    final snap = await _db.collection('users').doc(uid).collection(subName).get();
+    final batch = _db.batch();
+    for (var d in snap.docs) {
+      batch.delete(d.reference);
+    }
+    await batch.commit();
+  }
 }

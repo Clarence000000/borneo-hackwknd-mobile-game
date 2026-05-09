@@ -910,6 +910,107 @@ class GameState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Developer Option: Remove Money
+  Future<void> devRemoveMoney(double amount) async {
+    if (player == null) return;
+    player!.cashBalance = (player!.cashBalance - amount).clamp(0, double.infinity);
+    await _savePlayerState();
+    notifyListeners();
+  }
+
+  /// Developer Option: Reset Game
+  Future<void> devResetGame() async {
+    if (player == null) return;
+    final uid = player!.uid;
+    
+    // 1. Reset Player Stats
+    player = Player(
+      uid: uid,
+      displayName: player!.displayName,
+      country: player!.country,
+      currency: player!.currency,
+      cashBalance: kStartingCash,
+      bankBalance: 0,
+      creditScore: kStartingCreditScore,
+      currentDay: 1,
+    );
+    currentDay = 1;
+    
+    // 2. Clear Inventory
+    player!.inventory.clear();
+    player!.tractorOwned = false;
+    player!.autoHarvestEnabled = false;
+    player!.fertilizerPackCount = 0;
+    
+    // 3. Clear Financial Items (Cloud subcollections should be cleared if possible, but locally we wipe)
+    await _firestore.clearBnplPlans(uid);
+    await _firestore.clearInsurancePolicies(uid);
+    await _firestore.clearBankAccounts(uid);
+    
+    // 4. Clear Grid
+    for (final row in grid) {
+      for (final tile in row) {
+        tile.crop = null;
+        tile.farmState = FarmPlotState.idle;
+        tile.growthStage = 0;
+      }
+    }
+    
+    await _savePlayerState();
+    await _saveGridState();
+    game?.syncCropsFromGameState();
+    
+    // 5. Reset UI lists
+    bnplPlans = [];
+    insurances = [];
+    
+    notifyListeners();
+  }
+
+  /// Developer Option: Skip Multiple Days (High Efficiency)
+  Future<void> devSkipDays(int days) async {
+    if (days <= 0 || player == null) return;
+    
+    // 1. Advance Game Time
+    currentDay += days;
+    player!.currentDay = currentDay;
+    
+    // 2. Bulk Grow All Crops
+    for (final row in grid) {
+      for (final tile in row) {
+        if (tile.hasCrop) {
+          // In a 30-day skip, all current crops will definitely reach maturity
+          tile.growthStage = 3;
+          tile.farmState = FarmPlotState.ready;
+          tile.readyDay ??= currentDay;
+        }
+      }
+    }
+    
+    // 3. Bulk Financial Calculations (Late Fees)
+    for (final plan in bnplPlans) {
+      if (plan.status == BnplStatus.active && plan.nextDueDay != null) {
+        if (currentDay > plan.nextDueDay!) {
+          final daysPast = currentDay - plan.nextDueDay!;
+          final monthsMissed = (daysPast / kGameDaysPerMonth).floor() + 1;
+          plan.lateFees += (plan.monthlyAmount * kBnplLateFeePercent) * monthsMissed;
+        }
+      }
+    }
+
+    // 4. Bulk Insurance Expiration
+    insurances.removeWhere((ins) => ins.isExpired(currentDay));
+    player!.insurances.removeWhere((ins) => ins.isExpired(currentDay));
+
+    // 5. Persistence (Single Pass)
+    await _savePlayerState();
+    await _saveGridState();
+    game?.syncCropsFromGameState();
+    
+    addNotification('Instantly skipped $days days!', icon: Icons.bolt, color: Colors.amber.shade900);
+    notifyListeners();
+  }
+
   /// Plant a crop on the selected tile.
   Future<bool> plantCrop(CropType cropType) async {
     if (selectedTile == null || player == null) return false;

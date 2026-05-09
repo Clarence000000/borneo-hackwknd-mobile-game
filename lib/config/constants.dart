@@ -61,6 +61,7 @@ const Map<CropType, Map<String, dynamic>> kCropConfig = {
 // ─── BNPL Config ───────────────────────────────────────────────
 const double kBnplAdminFee = 10.0;
 const double kBnplLateFee = 23.0;
+const double kBnplLateFeePercent = 0.50; // 50% penalty
 const List<int> kBnplInstallmentOptions = [3, 6];
 
 // ─── Loan Config ───────────────────────────────────────────────
