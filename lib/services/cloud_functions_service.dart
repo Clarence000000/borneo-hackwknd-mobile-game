@@ -102,6 +102,8 @@ class CloudFunctionsService {
   }
 
   /// Recalculate credit score based on historical bank transactions
+  /// @deprecated Use CreditScoreService (local) instead. This Cloud Function
+  /// is broken and always fails with INTERNAL error.
   Future<Map<String, dynamic>> calculateCreditScore() async {
     await _ensureAuthenticated();
     try {
@@ -110,17 +112,8 @@ class CloudFunctionsService {
       return Map<String, dynamic>.from(result.data);
     } catch (e) {
       debugPrint('Error calling calculateCreditScore: $e');
-      return {
-        'score': 400,
-        'previousScore': 400,
-        'delta': 0,
-        'breakdown': {
-          'frequency': 0,
-          'consistency': 50,
-          'amount': 0,
-          'onTimePayments': 100,
-        },
-      };
+      // Return empty map — callers must NOT overwrite local score with defaults
+      return {};
     }
   }
 }

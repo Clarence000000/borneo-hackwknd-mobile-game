@@ -16,6 +16,7 @@ import 'package:farm_fintech/models/financial/loan.dart';
 import 'package:farm_fintech/models/financial/fixed_deposit.dart';
 import 'package:farm_fintech/models/financial/insurance.dart';
 import 'dart:math';
+import 'package:farm_fintech/services/credit_score_service.dart';
 
 /// In-game Bank screen — register, deposit/withdraw, loans, insurance, credit score.
 class BankScreen extends StatefulWidget {
@@ -44,42 +45,44 @@ class _BankScreenState extends State<BankScreen> {
     if (_refreshingCreditScore) return;
 
     setState(() => _refreshingCreditScore = true);
-    final result = await CloudFunctionsService().calculateCreditScore();
+
+    // Use local credit score — the Cloud Function is deprecated and
+    // always returns 400 on error, which overwrites the real score.
+    final currentScore = player.creditScore;
+
+    // Simulate a brief "scanning" delay for UX
+    await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
 
-    final previousScore =
-        (result['previousScore'] as num?)?.toInt() ?? player.creditScore;
-    final newScore = (result['score'] as num?)?.toInt() ?? player.creditScore;
-    final delta =
-        (result['delta'] as num?)?.toInt() ?? (newScore - previousScore);
-    final rawBreakdown = Map<String, dynamic>.from(
-      (result['breakdown'] as Map?) ?? const {},
-    );
+    // Determine level label
+    String levelLabel;
+    if (currentScore < 550) {
+      levelLabel = 'Fragile';
+    } else if (currentScore < 700) {
+      levelLabel = 'Robust';
+    } else {
+      levelLabel = 'Antifragile';
+    }
 
     setState(() {
       _refreshingCreditScore = false;
       _creditBreakdown = {
-        'frequency': (rawBreakdown['frequency'] as num?)?.toInt() ?? 0,
-        'consistency': (rawBreakdown['consistency'] as num?)?.toInt() ?? 50,
-        'amount': (rawBreakdown['amount'] as num?)?.toInt() ?? 0,
-        'onTimePayments':
-            (rawBreakdown['onTimePayments'] as num?)?.toInt() ?? 100,
+        'frequency': ((currentScore - 300) * 0.18).toInt().clamp(0, 100),
+        'consistency': ((currentScore - 300) * 0.20).toInt().clamp(0, 100),
+        'amount': ((currentScore - 300) * 0.15).toInt().clamp(0, 100),
+        'onTimePayments': ((currentScore - 300) * 0.22).toInt().clamp(0, 100),
       };
-      state.player?.creditScore = newScore;
     });
-    state.refresh();
 
-    final deltaLabel = delta > 0 ? '+$delta' : '$delta';
     DialogPopup.show(
       context,
-      title: 'Credit Score Refreshed',
+      title: 'Credit Score Analysis',
       message:
-          'Previous score: $previousScore\n'
-          'New score: $newScore\n'
-          'Change: $deltaLabel\n\n'
-          '${_scoreChangeExplanation(delta)}',
-      icon: delta >= 0 ? Icons.trending_up : Icons.trending_down,
-      iconColor: delta >= 0 ? GameColors.uiGreen : GameColors.uiRed,
+          'Current Score: $currentScore\n'
+          'Level: $levelLabel\n\n'
+          '${_scoreChangeExplanation(currentScore - 500)}',
+      icon: currentScore >= 550 ? Icons.trending_up : Icons.trending_down,
+      iconColor: currentScore >= 550 ? GameColors.uiGreen : GameColors.uiRed,
       textColor: const Color(0xFF2D1B10),
     );
   }
@@ -250,6 +253,8 @@ class _BankScreenState extends State<BankScreen> {
                           paymentType: 'bank',
                           category: 'deposit',
                         );
+                        // Credit reward for bank deposit
+                        player.creditScore = CreditScoreService().onBankDeposit(player.creditScore, state.currentDay);
                         state.refresh();
                       }
                     : null,

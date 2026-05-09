@@ -13,6 +13,7 @@ import 'package:farm_fintech/screens/profile_screen.dart';
 import 'package:farm_fintech/screens/merchant_screen.dart';
 import 'package:farm_fintech/screens/leaderboard_screen.dart';
 import 'package:farm_fintech/utils/currency_util.dart';
+import 'package:farm_fintech/widgets/handbook_widget.dart';
 
 /// Country flag emoji lookup
 const _countryFlags = {
@@ -327,6 +328,13 @@ class _HudOverlayState extends State<HudOverlay> {
                                 label: 'Rank',
                                 color: Colors.amber.shade900,
                                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LeaderboardScreen(player: player))),
+                              ),
+                              _toolDivider(horizontal: true),
+                              _ToolIcon(
+                                icon: Icons.menu_book,
+                                label: 'Handbook',
+                                color: Colors.amber.shade800,
+                                onTap: () => HandbookWidget.show(context),
                               ),
                               _toolDivider(horizontal: true),
                               _ToolIcon(

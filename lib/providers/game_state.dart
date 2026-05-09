@@ -20,6 +20,7 @@ import 'package:farm_fintech/services/weather_service.dart';
 import 'package:farm_fintech/engine/components/interactive_building_component.dart';
 import 'package:farm_fintech/engine/components/shady_lender_component.dart';
 import 'package:farm_fintech/services/gemini_service.dart';
+import 'package:farm_fintech/services/credit_score_service.dart';
 
 enum InteractionMenuState { main, plant, harvest, confirmRemove, lyra }
 
@@ -29,6 +30,7 @@ class GameState extends ChangeNotifier {
   final WeatherService _weather = WeatherService();
   final FirestoreService _firestore = FirestoreService();
   final Random _random = Random();
+  final CreditScoreService _creditService = CreditScoreService();
 
   // ── Flame game reference (for crop sprite sync) ─────────────
   RichiFarmGame? game;
@@ -425,6 +427,8 @@ class GameState extends ChangeNotifier {
     if (totalBalance < totalDue) {
       // Cannot pay — game over
       isGameOver = true;
+      // Credit penalty for failing rent
+      player!.creditScore = _creditService.onRentFailed(player!.creditScore);
       notifyListeners();
       return false;
     }
@@ -457,6 +461,9 @@ class GameState extends ChangeNotifier {
     if (count <= 0) count = 1;
     player!.rentPaymentCount += count;
     player!.lastRentPaidMonth = absoluteMonth;
+
+    // Credit reward for paying rent
+    player!.creditScore = _creditService.onRentPaid(player!.creditScore);
 
     await _savePlayerState();
     notifyListeners();
@@ -750,6 +757,10 @@ class GameState extends ChangeNotifier {
     player!.deposit(amount, method: PaymentMethod.cash);
     _startLoanSharkThreat();
 
+    // Credit penalty for taking a loan shark loan
+    player!.creditScore = _creditService.onTakeLoanSharkLoan(player!.creditScore);
+    addNotification('⚠️ Credit Score dropped! Loan shark = risky', icon: Icons.trending_down, color: Colors.red);
+
     try {
       await _savePlayerState();
       await _saveGridState();
@@ -807,9 +818,14 @@ class GameState extends ChangeNotifier {
       if (loan.remainingBalance <= 0.01) {
         loan.remainingBalance = 0;
         loan.status = LoanStatus.paid;
+        // Bonus for fully repaying shark loan
+        player!.creditScore = _creditService.onSharkLoanFullyRepaid(player!.creditScore);
+        addNotification('✅ Credit Score up! Shark loan repaid', icon: Icons.trending_up, color: Colors.green);
       }
     }
 
+    // Credit reward for repaying shark debt
+    player!.creditScore = _creditService.onSharkLoanRepaid(player!.creditScore);
     _addMonthlyExpense('interest', toRepay);
 
     try {
@@ -932,11 +948,16 @@ class GameState extends ChangeNotifier {
         if (loan.remainingBalance <= 0.01) {
           loan.remainingBalance = 0;
           loan.status = LoanStatus.paid;
+          player!.creditScore = _creditService.onSharkLoanFullyRepaid(player!.creditScore);
+        } else {
+          player!.creditScore = _creditService.onSharkLoanRepaid(player!.creditScore);
         }
       } else {
         final intimidationPenalty = (due * 0.25).toDouble();
         loan.remainingBalance += intimidationPenalty;
         _addMonthlyExpense('interest', intimidationPenalty);
+        // Credit penalty for shark loan auto-penalty
+        player!.creditScore = _creditService.onSharkLoanPenalty(player!.creditScore);
         _startLoanSharkThreat(seconds: 12);
       }
     }
@@ -999,6 +1020,10 @@ class GameState extends ChangeNotifier {
     player!.inventory[seedKey] = current + quantity;
 
     try {
+      // Credit reward for buying seeds (investing in farm)
+      if (!free) {
+        player!.creditScore = _creditService.onBuySeeds(player!.creditScore);
+      }
       await _savePlayerState();
       notifyListeners();
       addNotification('Bought $quantity x ${config['name']} Seeds${free ? ' (BNPL)' : ''}', icon: Icons.shopping_bag, color: Colors.green.shade700);
@@ -1302,6 +1327,8 @@ class GameState extends ChangeNotifier {
 
     player!.deposit(revenue, method: PaymentMethod.cash);
     _addMonthlyIncome(revenue);
+    // Credit reward for selling crops (earning income)
+    player!.creditScore = _creditService.onSellCrops(player!.creditScore);
     final remainingQty = availableQty - qty;
     if (remainingQty > 0) {
       player!.inventory[cropKey] = remainingQty;
@@ -1665,6 +1692,9 @@ class GameState extends ChangeNotifier {
                   'interest',
                   (result['penalty'] as num).toDouble(),
                 );
+                // Credit penalty for BNPL late payment
+                player!.creditScore = _creditService.onBnplLatePayment(player!.creditScore);
+                player!.creditScore = _creditService.onBnplLateFee(player!.creditScore);
               }
               needsRefresh = true;
             }
@@ -1683,13 +1713,15 @@ class GameState extends ChangeNotifier {
           }
         }
 
-        // 3. Weekly Credit Score recalc
-        if (currentDay % 7 == 0) {
-          final creditResult = await _cloud.calculateCreditScore();
-          if (creditResult['score'] != null) {
-            player!.creditScore = creditResult['score'] as int;
-            notifyListeners();
-          }
+        // 3. Daily credit score events
+        _creditService.onNewDay(currentDay, player!.bankBalance);
+
+        // Savings streak bonus (every 7 consecutive days with bank balance > 0)
+        player!.creditScore = _creditService.onSavingsStreakCheck(player!.creditScore);
+
+        // Penalty if bank balance hit zero
+        if (player!.bankRegistered && player!.bankBalance <= 0) {
+          player!.creditScore = _creditService.onBankBalanceZero(player!.creditScore);
         }
       }
 
@@ -1811,6 +1843,13 @@ class GameState extends ChangeNotifier {
       plan.nextDueDate = DateTime.now().add(const Duration(days: kGameDaysPerMonth));
 
       final isFullyPaid = plan.paidInstallments >= plan.installments;
+
+      // Credit score reward for on-time BNPL repayment
+      player!.creditScore = _creditService.onBnplRepaidOnTime(player!.creditScore);
+      if (isFullyPaid) {
+        player!.creditScore = _creditService.onBnplFullyRepaid(player!.creditScore);
+        addNotification('✅ Credit +10! BNPL fully repaid', icon: Icons.trending_up, color: Colors.green);
+      }
 
       if (isFullyPaid) {
         // Delete from Firestore — stream will auto-remove from local list
@@ -2052,6 +2091,8 @@ class GameState extends ChangeNotifier {
       player!.insurances.add(insurance);
     }
     
+    // Credit reward for buying insurance (responsible behavior)
+    player!.creditScore = _creditService.onBuyInsurance(player!.creditScore);
     await _savePlayerState();
     notifyListeners();
     return true;
@@ -2121,7 +2162,10 @@ class GameState extends ChangeNotifier {
     );
 
     player!.fixedDeposits.add(fd);
-    
+
+    // Credit reward for creating fixed deposit (long-term savings)
+    player!.creditScore = _creditService.onCreateFixedDeposit(player!.creditScore);
+
     try {
       await _savePlayerState();
       notifyListeners();
