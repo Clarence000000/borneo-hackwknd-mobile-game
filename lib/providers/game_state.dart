@@ -1355,8 +1355,20 @@ class GameState extends ChangeNotifier {
     final previous = player!.autoHarvestEnabled;
     player!.autoHarvestEnabled = enabled;
 
+    int harvestedCount = 0;
+    if (enabled) {
+      harvestedCount = _applyAutoHarvest();
+    }
+
     try {
       await _savePlayerState();
+      await _saveGridState();
+      game?.syncCropsFromGameState();
+      
+      if (harvestedCount > 0) {
+        addNotification('Tractor harvested $harvestedCount crops!', icon: Icons.agriculture, color: Colors.green.shade900);
+      }
+      
       notifyListeners();
       return true;
     } catch (_) {
