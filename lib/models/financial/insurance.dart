@@ -1,41 +1,37 @@
-/// Crop disaster insurance model.
+import 'package:farm_fintech/config/constants.dart';
+
+enum InsuranceType { flood, storm, drought }
+
 class Insurance {
   final String id;
-  final String plotId;
+  final InsuranceType type;
   final double premium;
-  final double coverageAmount;
-  final DateTime expiresAt;
-  InsuranceStatus status;
+  final int expiryDay; // Game day when it expires
+  bool isClaimed;
 
   Insurance({
     required this.id,
-    required this.plotId,
+    required this.type,
     required this.premium,
-    required this.coverageAmount,
-    required this.expiresAt,
-    this.status = InsuranceStatus.active,
+    required this.expiryDay,
+    this.isClaimed = false,
   });
 
-  bool get isExpired =>
-      status == InsuranceStatus.active && DateTime.now().isAfter(expiresAt);
+  bool isExpired(int currentDay) => currentDay >= expiryDay;
 
   Map<String, dynamic> toMap() => {
-        'plotId': plotId,
+        'id': id,
+        'type': type.name,
         'premium': premium,
-        'coverageAmount': coverageAmount,
-        'expiresAt': expiresAt.millisecondsSinceEpoch,
-        'status': status.name,
+        'expiryDay': expiryDay,
+        'isClaimed': isClaimed,
       };
 
-  factory Insurance.fromMap(String id, Map<String, dynamic> map) => Insurance(
-        id: id,
-        plotId: map['plotId'] as String,
+  factory Insurance.fromMap(Map<String, dynamic> map) => Insurance(
+        id: map['id'] as String,
+        type: InsuranceType.values.byName(map['type'] as String),
         premium: (map['premium'] as num).toDouble(),
-        coverageAmount: (map['coverageAmount'] as num).toDouble(),
-        expiresAt:
-            DateTime.fromMillisecondsSinceEpoch(map['expiresAt'] as int),
-        status: InsuranceStatus.values.byName(map['status'] as String),
+        expiryDay: map['expiryDay'] as int,
+        isClaimed: map['isClaimed'] as bool? ?? false,
       );
 }
-
-enum InsuranceStatus { active, expired, claimed }

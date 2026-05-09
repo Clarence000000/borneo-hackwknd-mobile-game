@@ -12,6 +12,7 @@ class DialogPopup extends StatelessWidget {
   final VoidCallback? onDismiss;
   final IconData? icon;
   final Color? iconColor;
+  final Color? textColor;
 
   const DialogPopup({
     super.key,
@@ -21,6 +22,7 @@ class DialogPopup extends StatelessWidget {
     this.onDismiss,
     this.icon,
     this.iconColor,
+    this.textColor,
   });
 
   /// Show as a modal bottom sheet.
@@ -31,6 +33,7 @@ class DialogPopup extends StatelessWidget {
     String? buttonText,
     IconData? icon,
     Color? iconColor,
+    Color? textColor,
   }) {
     return showDialog(
       context: context,
@@ -41,6 +44,7 @@ class DialogPopup extends StatelessWidget {
           buttonText: buttonText,
           icon: icon,
           iconColor: iconColor,
+          textColor: textColor,
           onDismiss: () => Navigator.pop(context),
         ),
       ),
@@ -90,8 +94,8 @@ class DialogPopup extends StatelessWidget {
                   ],
                   Text(
                     title,
-                    style: const TextStyle(
-                      color: GameColors.uiText,
+                    style: TextStyle(
+                      color: textColor ?? GameColors.uiText,
                       fontSize: 17,
                       fontWeight: FontWeight.bold,
                     ),
@@ -100,8 +104,8 @@ class DialogPopup extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     message,
-                    style: const TextStyle(
-                      color: GameColors.uiTextDim,
+                    style: TextStyle(
+                      color: textColor?.withOpacity(0.8) ?? GameColors.uiTextDim,
                       fontSize: 13,
                       height: 1.4,
                     ),

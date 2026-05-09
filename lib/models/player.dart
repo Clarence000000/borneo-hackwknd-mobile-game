@@ -1,3 +1,6 @@
+import 'package:farm_fintech/models/financial/fixed_deposit.dart';
+import 'package:farm_fintech/models/financial/insurance.dart';
+
 /// Player profile and wallet model.
 class Player {
   String uid;
@@ -26,11 +29,16 @@ class Player {
   // Inventory: crop key -> quantity (e.g. {'wheat': 5})
   Map<String, int> inventory;
 
+  // Bank
+  List<FixedDeposit> fixedDeposits;
+  List<Insurance> insurances;
+
   // Game Day Persistence
   int currentDay;
   int remainingCycleSeconds; // Intra-day time progress (counts down from max)
   int manualNextDayUsedToday;
   DateTime manualNextDayUsageDate;
+  bool isFlooded;
 
   Player({
     required this.uid,
@@ -54,7 +62,12 @@ class Player {
     this.remainingCycleSeconds = 20 * 60, // Default: kGameDayDurationMinutes * 60
     this.manualNextDayUsedToday = 0,
     DateTime? manualNextDayUsageDate,
+    List<FixedDeposit>? fixedDeposits,
+    List<Insurance>? insurances,
+    this.isFlooded = false,
   }) : inventory = Map<String, int>.from(inventory ?? {}),
+       fixedDeposits = List<FixedDeposit>.from(fixedDeposits ?? []),
+       insurances = List<Insurance>.from(insurances ?? []),
        createdAt = createdAt ?? DateTime.now(),
        manualNextDayUsageDate = manualNextDayUsageDate ?? DateTime.now();
 
@@ -112,6 +125,9 @@ class Player {
     'remainingCycleSeconds': remainingCycleSeconds,
     'manualNextDayUsedToday': manualNextDayUsedToday,
     'manualNextDayUsageDate': manualNextDayUsageDate.millisecondsSinceEpoch,
+    'fixedDeposits': fixedDeposits.map((fd) => fd.toMap()).toList(),
+    'insurances': insurances.map((i) => i.toMap()).toList(),
+    'isFlooded': isFlooded,
   };
 
   factory Player.fromMap(String uid, Map<String, dynamic> map) => Player(
@@ -144,6 +160,13 @@ class Player {
     manualNextDayUsageDate: map['manualNextDayUsageDate'] != null
         ? DateTime.fromMillisecondsSinceEpoch(map['manualNextDayUsageDate'] as int)
         : null,
+    fixedDeposits: (map['fixedDeposits'] as List?)
+        ?.map((e) => FixedDeposit.fromMap(Map<String, dynamic>.from(e)))
+        .toList(),
+    insurances: (map['insurances'] as List?)
+        ?.map((e) => Insurance.fromMap(Map<String, dynamic>.from(e)))
+        .toList(),
+    isFlooded: map['isFlooded'] as bool? ?? false,
   );
 }
 

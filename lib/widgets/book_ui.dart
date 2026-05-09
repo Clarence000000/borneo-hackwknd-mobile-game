@@ -97,6 +97,7 @@ class _BookUIState extends State<BookUI> {
                             : const SizedBox(),
                         pageNumber: _leftPageIndex + 1,
                         textColor: textColor,
+                        isLeft: true,
                       ),
                     ),
 
@@ -114,6 +115,7 @@ class _BookUIState extends State<BookUI> {
                             : const SizedBox(),
                         pageNumber: _leftPageIndex + 2,
                         textColor: textColor,
+                        isLeft: false,
                       ),
                     ),
                   ],
@@ -142,9 +144,11 @@ class _BookUIState extends State<BookUI> {
                       const SizedBox(width: 140),
                     
                     Text(
-                      'Page ${_leftPageIndex + 1}-${_leftPageIndex + 2}',
+                      _leftPageIndex + 1 < widget.pages.length
+                          ? 'Page ${_leftPageIndex + 1}-${_leftPageIndex + 2}'
+                          : 'Page ${_leftPageIndex + 1}',
                       style: GoogleFonts.almendra(
-                        fontSize: 20, // Larger
+                        fontSize: 20, 
                         fontWeight: FontWeight.bold,
                         color: textColor,
                       ),
@@ -176,14 +180,19 @@ class _BookPage extends StatelessWidget {
   final int pageNumber;
   final Color textColor;
 
+  final bool isLeft;
+
   const _BookPage({
     required this.content,
     required this.pageNumber,
     required this.textColor,
+    this.isLeft = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (content is SizedBox) return const SizedBox();
+    
     return Container(
       padding: const EdgeInsets.all(24),
       child: Stack(

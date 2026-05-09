@@ -12,6 +12,7 @@ import 'package:farm_fintech/models/financial/transaction.dart';
 import 'package:farm_fintech/models/financial/loan.dart';
 import 'package:farm_fintech/models/financial/insurance.dart';
 import 'package:farm_fintech/models/financial/bnpl_plan.dart';
+import 'package:farm_fintech/models/financial/fixed_deposit.dart';
 import 'package:farm_fintech/models/weather_event.dart';
 import 'package:farm_fintech/services/cloud_functions_service.dart';
 import 'package:farm_fintech/services/firestore_service.dart';
@@ -62,6 +63,7 @@ class GameState extends ChangeNotifier {
 
   // ── Game Day ────────────────────────────────────────────────
   int currentDay = 1;
+  bool isFlooded = false;
   int _remainingCycleSeconds = kGameDayDurationMinutes * 60;
   int _manualNextDayUsedToday = 0;
   DateTime _manualNextDayUsageDate = DateTime.now();
@@ -711,6 +713,7 @@ class GameState extends ChangeNotifier {
     _remainingCycleSeconds = newPlayer.remainingCycleSeconds;
     _manualNextDayUsedToday = newPlayer.manualNextDayUsedToday;
     _manualNextDayUsageDate = newPlayer.manualNextDayUsageDate;
+    isFlooded = newPlayer.isFlooded;
 
     // Do not notifyListeners early if we are showing a loading screen.
     // Wait for grid to be fully fetched.
@@ -849,6 +852,7 @@ class GameState extends ChangeNotifier {
     // Sync the current intra-day time back to the player model before saving
     player!.remainingCycleSeconds = _remainingCycleSeconds;
     player!.currentDay = currentDay;
+    player!.isFlooded = isFlooded;
     await _firestore.savePlayer(player!);
   }
 
@@ -908,6 +912,10 @@ class GameState extends ChangeNotifier {
   /// Plant a crop on the selected tile.
   Future<bool> plantCrop(CropType cropType) async {
     if (selectedTile == null || player == null) return false;
+    if (isFlooded) {
+      addNotification('Cannot plant while flooded!', icon: Icons.warning, color: Colors.red);
+      return false;
+    }
 
     final (col, row) = selectedTile!;
     final tile = grid[row][col];
@@ -1386,8 +1394,19 @@ class GameState extends ChangeNotifier {
         );
       }
 
+      // Reset daily disaster states
+      isFlooded = false;
+
+      // Expire insurances
+      if (player != null) {
+        player!.insurances.removeWhere((i) => i.isExpired(currentDay));
+      }
+
       // Sync crop sprites with updated growth stages
       game?.syncCropsFromGameState();
+
+      // 4. Bank Logic: Interest and Maturity
+      _processInterestsAndMaturity();
 
       return true;
     } finally {
@@ -1513,27 +1532,69 @@ class GameState extends ChangeNotifier {
     return result;
   }
 
-  /// Trigger a disaster event — destroy uninsured crops.
+  /// Trigger a disaster event — refined logic.
   int triggerDisaster(DisasterType type) {
     activeDisaster = type;
-    var destroyed = 0;
+    var destroyedCount = 0;
+    double totalPayout = 0;
+
+    InsuranceType? targetInsurance;
+    if (type == DisasterType.flood) targetInsurance = InsuranceType.flood;
+    if (type == DisasterType.storm) targetInsurance = InsuranceType.storm;
+    if (type == DisasterType.drought) targetInsurance = InsuranceType.drought;
+
+    final hasInsurance = player?.insurances.any((i) => i.type == targetInsurance && !i.isClaimed) ?? false;
 
     for (final row in grid) {
       for (final tile in row) {
-        if (tile.hasCrop && !tile.insured) {
-          tile.destroyCrop();
-          destroyed++;
+        if (tile.hasCrop) {
+          final config = kCropConfig[tile.crop!]!;
+          final seedCost = config['seedCost'] as double;
+          final sellPrice = config['sellPrice'] as double;
+          
+          if (type == DisasterType.flood) {
+            isFlooded = true;
+            tile.destroyCrop();
+            destroyedCount++;
+            if (hasInsurance) {
+              totalPayout += seedCost + (sellPrice - seedCost) * 0.8;
+            }
+          } else if (type == DisasterType.storm) {
+            tile.destroyCrop();
+            destroyedCount++;
+            if (hasInsurance) {
+              totalPayout += seedCost + (sellPrice - seedCost) * 0.8;
+            }
+          } else if (type == DisasterType.drought) {
+            // Downgrade to initial state
+            tile.growthStage = 1;
+            tile.farmState = FarmPlotState.growing;
+            if (hasInsurance) {
+              // Payout for drought is lower since crops aren't destroyed
+              totalPayout += (sellPrice - seedCost) * 0.3;
+            }
+          }
         }
       }
     }
 
-    // Sync crop sprites (destroyed crops get removed)
+    if (totalPayout > 0 && player != null) {
+      totalPayout = totalPayout.roundToDouble();
+      player!.deposit(totalPayout, method: PaymentMethod.bank);
+      addNotification('Insurance Payout: ${totalPayout.toInt()}', icon: Icons.monetization_on, color: Colors.green);
+      
+      // Mark insurance as claimed (optional, usually they are for the whole period)
+      // For this game, let's keep it simple: one payout per disaster event.
+    }
+
+    // Sync crop sprites
     game?.syncCropsFromGameState();
     game?.updateWeatherVisuals(type);
     notifyListeners();
-    _saveGridState(); // Persist disaster damage
+    _saveGridState();
+    _savePlayerState();
     _maybeGenerateDisasterQuest(type);
-    return destroyed;
+    return destroyedCount;
   }
 
   /// Clear the active disaster.
@@ -1580,6 +1641,174 @@ class GameState extends ChangeNotifier {
   /// Notify listeners that state has changed (called from UI after external mutation).
   void refresh() {
     notifyListeners();
+  }
+
+  // ── Bank Logic ───────────────────────────────────────────────
+
+  void _processInterestsAndMaturity() {
+    if (player == null) return;
+
+    // 1. Savings Interest (1% daily)
+    if (player!.bankRegistered && player!.bankBalance > 0) {
+      final interest = (player!.bankBalance * 0.01).roundToDouble();
+      player!.bankBalance += interest;
+      _addMonthlyIncome(interest);
+      
+      // Log interest transaction
+      _firestore.addTransaction(player!.uid, Transaction(
+        id: '',
+        paymentType: TransactionType.bank,
+        amount: interest,
+        category: TransactionCategory.other,
+        timestamp: DateTime.now(),
+        description: 'Daily Savings Interest (1%)',
+      ));
+    }
+
+    // 2. Fixed Deposit Maturity
+    final matured = <FixedDeposit>[];
+    for (final fd in player!.fixedDeposits) {
+      if (!fd.isMatured && currentDay >= fd.endDay) {
+        fd.isMatured = true;
+        final totalValue = (fd.principal * (1 + fd.interestRate)).roundToDouble();
+        player!.bankBalance += totalValue;
+        matured.add(fd);
+
+        _addMonthlyIncome(totalValue - fd.principal);
+        
+        // Log maturity transaction
+        _firestore.addTransaction(player!.uid, Transaction(
+          id: '',
+          paymentType: TransactionType.bank,
+          amount: totalValue,
+          category: TransactionCategory.other,
+          timestamp: DateTime.now(),
+          description: 'Fixed Deposit Matured: ${fd.durationMonths} Month(s)',
+        ));
+      }
+    }
+
+    // Remove matured fixed deposits from the active list
+    player!.fixedDeposits.removeWhere((fd) => matured.contains(fd));
+
+    if (matured.isNotEmpty) {
+      addNotification('Fixed Deposit(s) Matured!', icon: Icons.account_balance_wallet, color: Colors.blue.shade900);
+    }
+
+    _savePlayerState();
+    notifyListeners();
+  }
+
+  Future<bool> buyInsurance(InsuranceType type, double price) async {
+    if (player == null) return false;
+    
+    if (player!.cashBalance < price && player!.bankBalance < price) return false;
+    
+    if (player!.cashBalance >= price) {
+      player!.pay(price, method: PaymentMethod.cash);
+    } else {
+      player!.pay(price, method: PaymentMethod.bank);
+    }
+
+    final existingIndex = player!.insurances.indexWhere((i) => i.type == type);
+    if (existingIndex != -1) {
+      final existing = player!.insurances[existingIndex];
+      player!.insurances[existingIndex] = Insurance(
+        id: existing.id,
+        type: existing.type,
+        premium: existing.premium + price,
+        expiryDay: existing.expiryDay + 30,
+        isClaimed: existing.isClaimed,
+      );
+    } else {
+      final insurance = Insurance(
+        id: 'ins-${DateTime.now().millisecondsSinceEpoch}-${type.name}',
+        type: type,
+        premium: price,
+        expiryDay: currentDay + 30,
+      );
+      player!.insurances.add(insurance);
+    }
+    
+    await _savePlayerState();
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> buyComprehensiveInsurance(double totalPrice) async {
+    if (player == null) return false;
+    
+    if (player!.cashBalance < totalPrice && player!.bankBalance < totalPrice) return false;
+    
+    if (player!.cashBalance >= totalPrice) {
+      player!.pay(totalPrice, method: PaymentMethod.cash);
+    } else {
+      player!.pay(totalPrice, method: PaymentMethod.bank);
+    }
+
+    final expiry = currentDay + 30;
+    final pricePerType = totalPrice / 3;
+
+    player!.insurances.addAll([
+      Insurance(id: 'ins-${DateTime.now().millisecondsSinceEpoch}-f', type: InsuranceType.flood, premium: pricePerType, expiryDay: expiry),
+      Insurance(id: 'ins-${DateTime.now().millisecondsSinceEpoch}-s', type: InsuranceType.storm, premium: pricePerType, expiryDay: expiry),
+      Insurance(id: 'ins-${DateTime.now().millisecondsSinceEpoch}-d', type: InsuranceType.drought, premium: pricePerType, expiryDay: expiry),
+    ]);
+    
+    await _savePlayerState();
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> cancelInsurance(String insuranceId) async {
+    if (player == null) return;
+    player!.insurances.removeWhere((i) => i.id == insuranceId);
+    await _savePlayerState();
+    notifyListeners();
+  }
+
+  Future<bool> createFixedDeposit(double amount, int months) async {
+    if (player == null || amount < 100) return false;
+
+    // Interest rates: 1m: 5%, 3m: 10%, 6m: 15%
+    double rate = 0;
+    if (months == 1) rate = 0.05;
+    else if (months == 3) rate = 0.10;
+    else if (months == 6) rate = 0.15;
+    else return false;
+
+    // Try to pay from cash or bank
+    bool paid = false;
+    if (player!.cashBalance >= amount) {
+      player!.pay(amount, method: PaymentMethod.cash);
+      paid = true;
+    } else if (player!.bankBalance >= amount) {
+      player!.pay(amount, method: PaymentMethod.bank);
+      paid = true;
+    }
+
+    if (!paid) return false;
+
+    final fd = FixedDeposit(
+      id: 'fd-${DateTime.now().millisecondsSinceEpoch}',
+      principal: amount,
+      interestRate: rate,
+      durationMonths: months,
+      startDay: currentDay,
+      endDay: currentDay + (months * kGameDaysPerMonth),
+    );
+
+    player!.fixedDeposits.add(fd);
+    
+    try {
+      await _savePlayerState();
+      notifyListeners();
+      return true;
+    } catch (e) {
+      // Revert payment
+      player!.deposit(amount, method: PaymentMethod.bank);
+      return false;
+    }
   }
 }
 

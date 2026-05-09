@@ -12,6 +12,10 @@ import 'package:farm_fintech/utils/currency_util.dart';
 import 'package:farm_fintech/widgets/dialog_popup.dart';
 import 'package:farm_fintech/widgets/financial_advisor.dart';
 import 'package:farm_fintech/widgets/book_ui.dart';
+import 'package:farm_fintech/models/financial/loan.dart';
+import 'package:farm_fintech/models/financial/fixed_deposit.dart';
+import 'package:farm_fintech/models/financial/insurance.dart';
+import 'dart:math';
 
 /// In-game Bank screen — register, deposit/withdraw, loans, insurance, credit score.
 class BankScreen extends StatefulWidget {
@@ -24,6 +28,10 @@ class BankScreen extends StatefulWidget {
 class _BankScreenState extends State<BankScreen> {
   double _loanAmount = 500;
   double _loanMonths = 6;
+  double _depositAmount = 0;
+  double _withdrawAmount = 0;
+  double _fdAmount = 100;
+  int _fdMonths = 1;
   bool _refreshingCreditScore = false;
   Map<String, int> _creditBreakdown = const {
     'frequency': 0,
@@ -72,6 +80,7 @@ class _BankScreenState extends State<BankScreen> {
           '${_scoreChangeExplanation(delta)}',
       icon: delta >= 0 ? Icons.trending_up : Icons.trending_down,
       iconColor: delta >= 0 ? GameColors.uiGreen : GameColors.uiRed,
+      textColor: const Color(0xFF2D1B10),
     );
   }
 
@@ -85,240 +94,448 @@ class _BankScreenState extends State<BankScreen> {
     return 'No change yet. Try more regular bank usage or repay insurance / loan costs through the bank.';
   }
 
+  Future<void> _confirmPurchase(BuildContext context, String name, double price, Future<bool> Function() onConfirm, bool isExtension) async {
+    final action = isExtension ? 'Extend' : 'Purchase';
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFFF4E4BC),
+        title: Text('$action Policy', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10))),
+        content: Text(
+          'Would you like to $action $name for 1 month (30 days)?\n\n'
+          'Cost: ${CurrencyUtil.format(price, 'MY')}', 
+          style: GoogleFonts.almendra(color: const Color(0xFF2D1B10)),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancel', style: GoogleFonts.almendra(color: Colors.grey))),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: Text('Confirm', style: GoogleFonts.almendra(color: Colors.blue.shade900, fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      final success = await onConfirm();
+      if (success && context.mounted) {
+        DialogPopup.show(
+          context,
+          title: isExtension ? 'Policy Extended!' : 'Policy Purchased!',
+          message: isExtension ? 'Your coverage has been extended by 30 days.' : 'You are now covered for 1 month.',
+          icon: Icons.check_circle,
+          iconColor: GameColors.uiGreen,
+          textColor: const Color(0xFF2D1B10),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmDrop(BuildContext context, String name, VoidCallback onConfirm) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFFF4E4BC),
+        title: Text('Drop Policy', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10))),
+        content: Text(
+          'Are you sure you want to drop your $name insurance?\n\n'
+          'IMPORTANT: No refund will be given.', 
+          style: GoogleFonts.almendra(color: const Color(0xFF2D1B10)),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Keep It', style: GoogleFonts.almendra(color: Colors.grey))),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: Text('Drop Policy', style: GoogleFonts.almendra(color: Colors.red.shade900, fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      onConfirm();
+      if (context.mounted) {
+        DialogPopup.show(
+          context,
+          title: 'Policy Dropped',
+          message: 'Your coverage for $name has been cancelled.',
+          icon: Icons.delete_forever,
+          iconColor: Colors.red,
+          textColor: const Color(0xFF2D1B10),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<GameState>(
       builder: (context, state, _) {
         final player = state.player;
         if (player == null) return const SizedBox();
+        final pages = <Widget>[];
 
-        final pages = [
-          // ── Page 1: Credit Score & Breakdown ───────────
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _CreditScoreCard(
-                score: player.creditScore,
-                refreshing: _refreshingCreditScore,
-                onRefresh: () => _refreshCreditScore(state, player),
-              ),
-              const SizedBox(height: 12),
-              _CreditImprovementCard(breakdown: _creditBreakdown),
-            ],
-          ),
+        // ── Page 1: Credit Score & Breakdown ───────────
+        pages.add(Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _CreditScoreCard(
+              score: player.creditScore,
+              refreshing: _refreshingCreditScore,
+              onRefresh: () => _refreshCreditScore(state, player),
+            ),
+            const SizedBox(height: 12),
+            _CreditImprovementCard(breakdown: _creditBreakdown),
+          ],
+        ));
 
-          // ── Page 2: Balance & Registration ──────────────
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (!player.bankRegistered)
-                _ActionCard(
-                  icon: Icons.account_balance,
-                  title: 'Register Bank Account',
-                  subtitle:
-                      'Open a digital bank account to unlock loans, insurance, and build your credit score.',
-                  buttonText: 'Register (Free)',
-                  buttonColor: GameColors.uiGreen,
-                  onPressed: () {
-                    player.bankRegistered = true;
-                    player.bankBalance = 0;
-                    state.refresh();
-                    DialogPopup.show(
-                      context,
-                      title: '🎉 Bank Account Opened!',
-                      message:
-                          'You now have a digital bank account. Use it to:\n\n'
-                          '• Make digital payments (builds credit score)\n'
-                          '• Apply for loans\n'
-                          '• Buy crop insurance\n\n'
-                          'Deposit cash to get started!',
-                      icon: Icons.check_circle,
-                      iconColor: GameColors.uiGreen,
-                    );
-                  },
-                )
-              else ...[
-                _BalanceCard(player: player),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _QuickActionButton(
-                        label: 'Deposit',
-                        icon: Icons.arrow_downward,
-                        color: GameColors.uiGreen,
-                        onPressed: player.cashBalance >= 100
-                            ? () {
-                                player.pay(100, method: PaymentMethod.cash);
-                                player.deposit(100, method: PaymentMethod.bank);
-                                FirestoreService().logTransaction(
-                                  player.uid,
-                                  amount: 100,
-                                  paymentType: 'bank',
-                                  category: 'deposit',
-                                );
-                                state.refresh();
-                              }
-                            : null,
-                      ),
+        // ── Page 2: Balance & Registration ──────────────
+        pages.add(Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!player.bankRegistered)
+              _ActionCard(
+                icon: Icons.account_balance,
+                title: 'Register Bank Account',
+                subtitle:
+                    'Open a digital bank account to unlock loans, insurance, and build your credit score.',
+                buttonText: 'Register (Free)',
+                buttonColor: GameColors.uiGreen,
+                onPressed: () {
+                  player.bankRegistered = true;
+                  player.bankBalance = 0;
+                  state.refresh();
+                  DialogPopup.show(
+                    context,
+                    title: '🎉 Bank Account Opened!',
+                    message:
+                        'You now have a digital bank account. Use it to:\n\n'
+                        '• Make digital payments (builds credit score)\n'
+                        '• Apply for loans\n'
+                        '• Buy crop insurance\n\n'
+                        'Deposit cash to get started!',
+                    icon: Icons.check_circle,
+                    iconColor: GameColors.uiGreen,
+                    textColor: const Color(0xFF2D1B10),
+                  );
+                },
+              )
+            else ...[
+              _BalanceCard(player: player),
+              const SizedBox(height: 16),
+              
+              Text('Deposit to Savings', 
+                  style: GoogleFonts.almendra(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10))),
+              Row(
+                children: [
+                  Expanded(
+                    child: Slider(
+                      value: _depositAmount.clamp(0, max(0, (min(player.cashBalance, 5000) ~/ 100) * 100.0)),
+                      min: 0,
+                      max: max(0, (min(player.cashBalance, 5000) ~/ 100) * 100.0),
+                      divisions: max(1, (min(player.cashBalance, 5000) ~/ 100)),
+                      activeColor: GameColors.uiGreen,
+                      onChanged: player.cashBalance >= 100 ? (v) => setState(() => _depositAmount = v.roundToDouble()) : null,
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _QuickActionButton(
-                        label: 'Withdraw',
-                        icon: Icons.arrow_upward,
-                        color: GameColors.uiHighlight,
-                        onPressed: player.bankBalance >= 100
-                            ? () {
-                                player.pay(100, method: PaymentMethod.bank);
-                                player.deposit(100, method: PaymentMethod.cash);
-                                FirestoreService().logTransaction(
-                                  player.uid,
-                                  amount: 100,
-                                  paymentType: 'bank',
-                                  category: 'withdrawal',
-                                );
-                                state.refresh();
-                              }
-                            : null,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  '* Transactions are in units of ${CurrencyUtil.format(100, player.country)}',
-                  style: GoogleFonts.almendra(
-                    color: const Color(0xFF2D1B10).withOpacity(0.8),
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    fontStyle: FontStyle.italic,
                   ),
-                ),
-              ],
-            ],
-          ),
+                  Text(CurrencyUtil.format(_depositAmount, player.country), 
+                      style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10))),
+                ],
+              ),
+              _QuickActionButton(
+                label: 'Deposit',
+                icon: Icons.arrow_downward,
+                color: GameColors.uiGreen,
+                onPressed: player.cashBalance >= _depositAmount && _depositAmount > 0
+                    ? () {
+                        player.pay(_depositAmount, method: PaymentMethod.cash);
+                        player.deposit(_depositAmount, method: PaymentMethod.bank);
+                        FirestoreService().logTransaction(
+                          player.uid,
+                          amount: _depositAmount,
+                          paymentType: 'bank',
+                          category: 'deposit',
+                        );
+                        state.refresh();
+                      }
+                    : null,
+              ),
 
-          // ── Page 3: Loan Planner ────────────────────────
-          if (player.bankRegistered)
+              const SizedBox(height: 20),
+
+              Text('Withdraw from Savings', 
+                  style: GoogleFonts.almendra(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10))),
+              Row(
+                children: [
+                  Expanded(
+                    child: Slider(
+                      value: _withdrawAmount.clamp(0, max(0, (min(player.bankBalance, 5000) ~/ 100) * 100.0)),
+                      min: 0,
+                      max: max(0, (min(player.bankBalance, 5000) ~/ 100) * 100.0),
+                      divisions: max(1, (min(player.bankBalance, 5000) ~/ 100)),
+                      activeColor: GameColors.uiHighlight,
+                      onChanged: player.bankBalance >= 100 ? (v) => setState(() => _withdrawAmount = v.roundToDouble()) : null,
+                    ),
+                  ),
+                  Text(CurrencyUtil.format(_withdrawAmount, player.country), 
+                      style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10))),
+                ],
+              ),
+              _QuickActionButton(
+                label: 'Withdraw',
+                icon: Icons.arrow_upward,
+                color: GameColors.uiHighlight,
+                onPressed: player.bankBalance >= _withdrawAmount && _withdrawAmount > 0
+                    ? () {
+                        player.pay(_withdrawAmount, method: PaymentMethod.bank);
+                        player.deposit(_withdrawAmount, method: PaymentMethod.cash);
+                        FirestoreService().logTransaction(
+                          player.uid,
+                          amount: _withdrawAmount,
+                          paymentType: 'bank',
+                          category: 'withdrawal',
+                        );
+                        state.refresh();
+                      }
+                    : null,
+              ),
+              
+              const SizedBox(height: 12),
+              Text(
+                '* Max 5,000 per transaction. Savings earn 1% daily interest.',
+                style: GoogleFonts.almendra(
+                  color: const Color(0xFF2D1B10).withOpacity(0.8),
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ],
+        ));
+
+        // ── Page 3: Fixed Deposits (Optional) ──────────────
+        if (player.bankRegistered) {
+          pages.add(Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Fixed Deposits',
+                  style: GoogleFonts.cinzel(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      color: const Color(0xFF2D1B10))),
+              const SizedBox(height: 8),
+              Text('High interest, but funds are locked until maturity.',
+                  style: GoogleFonts.almendra(fontSize: 16, color: const Color(0xFF2D1B10).withOpacity(0.8))),
+              const SizedBox(height: 16),
+              
+              Text('Amount to Lock (Min 100)', 
+                  style: GoogleFonts.almendra(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10))),
+              Slider(
+                value: _fdAmount.clamp(100, max(100, ((player.cashBalance + player.bankBalance) ~/ 100) * 100.0)),
+                min: 100,
+                max: max(100, ((player.cashBalance + player.bankBalance) ~/ 100) * 100.0),
+                divisions: max(1, (((player.cashBalance + player.bankBalance) ~/ 100) - 1)),
+                activeColor: const Color(0xFF5D4037),
+                onChanged: (player.cashBalance + player.bankBalance) >= 100 
+                    ? (v) => setState(() => _fdAmount = v.roundToDouble()) 
+                    : null,
+              ),
+              Center(child: Text(CurrencyUtil.format(_fdAmount, player.country), style: GoogleFonts.cinzel(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10)))),
+              
+              const SizedBox(height: 16),
+              Text('Duration', 
+                  style: GoogleFonts.almendra(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10))),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _FDDurationChip(label: '1M (5%)', selected: _fdMonths == 1, onTap: () => setState(() => _fdMonths = 1)),
+                  _FDDurationChip(label: '3M (10%)', selected: _fdMonths == 3, onTap: () => setState(() => _fdMonths = 3)),
+                  _FDDurationChip(label: '6M (15%)', selected: _fdMonths == 6, onTap: () => setState(() => _fdMonths = 6)),
+                ],
+              ),
+              
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: (player.cashBalance >= _fdAmount || player.bankBalance >= _fdAmount)
+                      ? () async {
+                          final success = await state.createFixedDeposit(_fdAmount, _fdMonths);
+                          if (success && mounted) {
+                            DialogPopup.show(
+                              context,
+                              title: 'Fixed Deposit Created!',
+                              message: 'Your funds are now working for you.',
+                              icon: Icons.lock,
+                              iconColor: GameColors.uiGreen,
+                              textColor: const Color(0xFF2D1B10),
+                            );
+                          }
+                        }
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF5D4037),
+                    foregroundColor: const Color(0xFFF4E4BC),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: Text('Create Fixed Deposit', style: GoogleFonts.cinzel(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              
+              if (player.fixedDeposits.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Text('Active Deposits', style: GoogleFonts.cinzel(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10))),
+                const SizedBox(height: 8),
+                ...player.fixedDeposits.map((fd) => _FixedDepositItem(fd: fd, currentDay: state.currentDay, country: player.country)),
+              ]
+            ],
+          ));
+        }
+
+        // ── Page 4: Loan Planner (Always Shown) ───────────
+        pages.add(Column(
+          children: [
             _LoanPlannerCard(
               amount: _loanAmount,
               months: _loanMonths.toInt(),
               country: player.country,
               score: player.creditScore,
-              onAmountChanged: (value) {
-                setState(() => _loanAmount = value);
-              },
-              onMonthsChanged: (value) {
-                setState(() => _loanMonths = value);
-              },
-              onApply: player.creditScore >= kMinLoanCreditScore
+              onAmountChanged: (value) => setState(() => _loanAmount = value),
+              onMonthsChanged: (value) => setState(() => _loanMonths = value),
+              onApply: player.bankRegistered && player.creditScore >= kMinLoanCreditScore
                   ? () async {
                       final selectedMonths = _loanMonths.toInt();
-                      final monthlyPayment =
-                          _loanAmount * (1 + kLoanInterestRate) / selectedMonths;
-
-                      await FinancialAdvisor.warnLoan(
-                        context,
-                        player,
-                        monthlyPayment,
-                        300,
-                      );
+                      final monthlyPayment = _loanAmount * (1 + kLoanInterestRate) / selectedMonths;
+                      await FinancialAdvisor.warnLoan(context, player, monthlyPayment, 300);
                       if (!context.mounted) return;
-
-                      final result = await CloudFunctionsService()
-                          .evaluateLoan(_loanAmount, selectedMonths);
+                      final result = await CloudFunctionsService().evaluateLoan(_loanAmount, selectedMonths);
                       if (!context.mounted) return;
-
                       if (result['approved'] == true) {
-                        final updatedPlayer =
-                            await FirestoreService().getPlayer(player.uid);
-                        if (updatedPlayer != null) {
-                          state.player = updatedPlayer;
-                        }
+                        final updatedPlayer = await FirestoreService().getPlayer(player.uid);
+                        if (updatedPlayer != null) state.player = updatedPlayer;
                         state.refresh();
-
                         if (!context.mounted) return;
                         DialogPopup.show(
                           context,
                           title: '✅ Loan Approved!',
-                          message: result['message'] ??
-                              '${CurrencyUtil.format(_loanAmount, player.country)} deposited to your bank.',
+                          message: result['message'] ?? '${CurrencyUtil.format(_loanAmount, player.country)} deposited.',
                           icon: Icons.check_circle,
                           iconColor: GameColors.uiGreen,
+                          textColor: const Color(0xFF2D1B10),
                         );
                       } else {
                         DialogPopup.show(
                           context,
                           title: '❌ Loan Denied',
-                          message: result['reason'] ??
-                              'Your credit score is too low.',
+                          message: result['reason'] ?? 'Credit score too low.',
                           icon: Icons.cancel,
                           iconColor: GameColors.uiRed,
+                          textColor: const Color(0xFF2D1B10),
                         );
                       }
                     }
                   : null,
-            )
-          else
-            Center(
-              child: Text(
-                'Register to view loans',
-                style: GoogleFonts.cinzel(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF2D1B10),
-                ),
+            ),
+            if (!player.bankRegistered)
+              Padding(
+                padding: const EdgeInsets.only(top: 20),
+                child: Text('Register to apply for loans.', 
+                    style: GoogleFonts.almendra(fontSize: 16, color: Colors.red.shade900, fontStyle: FontStyle.italic)),
+              ),
+            if (state.loans.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              Text('Active Loans', style: GoogleFonts.cinzel(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10))),
+              const SizedBox(height: 8),
+              ...state.loans.where((l) => l.status == LoanStatus.active).map((l) => _ActiveLoanItem(loan: l, country: player.country)),
+            ]
+          ],
+        ));
+
+        // ── Page 5 & 6: Insurance (Optional) ──────────────
+        if (player.bankRegistered) {
+          pages.add(SingleChildScrollView(
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Insurance Shop',
+                      style: GoogleFonts.cinzel(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w900,
+                          color: const Color(0xFF2D1B10))),
+                  const SizedBox(height: 8),
+                  Text('Get repaid if disaster strikes. Policies last 30 days.',
+                      style: GoogleFonts.almendra(fontSize: 16, color: const Color(0xFF2D1B10).withOpacity(0.8))),
+                  const SizedBox(height: 16),
+  
+                  _InsuranceOptionRow(
+                    title: 'Flood Insurance',
+                    price: 100,
+                    type: InsuranceType.flood,
+                    onBuy: () => _confirmPurchase(context, 'Flood', 100, () => state.buyInsurance(InsuranceType.flood, 100), player.insurances.any((i) => i.type == InsuranceType.flood)),
+                    country: player.country,
+                    isExtension: player.insurances.any((i) => i.type == InsuranceType.flood),
+                  ),
+                  _InsuranceOptionRow(
+                    title: 'Storm Insurance',
+                    price: 75,
+                    type: InsuranceType.storm,
+                    onBuy: () => _confirmPurchase(context, 'Storm', 75, () => state.buyInsurance(InsuranceType.storm, 75), player.insurances.any((i) => i.type == InsuranceType.storm)),
+                    country: player.country,
+                    isExtension: player.insurances.any((i) => i.type == InsuranceType.storm),
+                  ),
+                  _InsuranceOptionRow(
+                    title: 'Drought Insurance',
+                    price: 50,
+                    type: InsuranceType.drought,
+                    onBuy: () => _confirmPurchase(context, 'Drought', 50, () => state.buyInsurance(InsuranceType.drought, 50), player.insurances.any((i) => i.type == InsuranceType.drought)),
+                    country: player.country,
+                    isExtension: player.insurances.any((i) => i.type == InsuranceType.drought),
+                  ),
+                  const SizedBox(height: 16),
+                  _ActionCard(
+                    icon: Icons.auto_awesome,
+                    title: 'Comprehensive Bundle',
+                    subtitle: '80% of total price.',
+                    buttonText: 'Buy Bundle (${CurrencyUtil.format(180, player.country)})',
+                    buttonColor: Colors.purple.shade700,
+                    onPressed: (player.insurances.isEmpty && (player.cashBalance >= 180 || player.bankBalance >= 180))
+                        ? () => _confirmPurchase(context, 'Bundle', 180, () => state.buyComprehensiveInsurance(180), false)
+                        : null,
+                  ),
+                  const SizedBox(height: 30),
+                ],
               ),
             ),
+          ));
 
-          // ── Page 4: Crop Insurance ───────────
-          if (player.bankRegistered)
-            Column(
-              children: [
-                _ActionCard(
-                  icon: Icons.shield,
-                  title: 'Crop Insurance',
-                  subtitle: 'Premium: 5% of coverage value.',
-                  buttonText:
-                      'Buy (${CurrencyUtil.format(50, player.country)})',
-                  buttonColor: GameColors.uiAccent,
-                  onPressed:
-                      (player.cashBalance >= 50 || player.bankBalance >= 50)
-                          ? () {
-                              var insuredCount = 0;
-                              for (final row in state.grid) {
-                                for (final tile in row) {
-                                  if (tile.hasCrop && !tile.insured) {
-                                    tile.insured = true;
-                                    insuredCount++;
-                                  }
-                                }
-                              }
-                              if (insuredCount == 0) return;
-
-                              if (player.bankBalance >= 50) {
-                                player.pay(50, method: PaymentMethod.bank);
-                              } else {
-                                player.pay(50, method: PaymentMethod.cash);
-                              }
-                              state.recordInsuranceExpense(50);
-                              state.refresh();
-                              DialogPopup.show(
-                                context,
-                                title: '🛡️ Crops Insured!',
-                                message: '$insuredCount crops protected.',
-                                icon: Icons.shield,
-                                iconColor: GameColors.uiGreen,
-                              );
-                            }
-                          : null,
-                ),
-              ],
-            )
-          else
-            const SizedBox(),
-        ];
+          pages.add(SingleChildScrollView(
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Active Policies',
+                      style: GoogleFonts.cinzel(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w900,
+                          color: const Color(0xFF2D1B10))),
+                  const SizedBox(height: 8),
+                  Text('Review your current disaster coverage.',
+                      style: GoogleFonts.almendra(fontSize: 16, color: const Color(0xFF2D1B10).withOpacity(0.8))),
+                  const SizedBox(height: 16),
+                  
+                  if (player.insurances.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 40),
+                      child: Center(
+                        child: Text('No active policies.', style: GoogleFonts.almendra(fontSize: 18, color: const Color(0xFF2D1B10).withOpacity(0.5))),
+                      ),
+                    )
+                  else
+                    ...player.insurances.map((ins) => _InsuranceItem(ins: ins, currentDay: state.currentDay, country: player.country, onDrop: () => _confirmDrop(context, ins.type.name, () => state.cancelInsurance(ins.id)))),
+                  const SizedBox(height: 30),
+                ],
+              ),
+            ),
+          ));
+        }
 
         return BookUI(
           title: '🏦 Royal Bank',
@@ -779,6 +996,197 @@ class _QuickActionButton extends StatelessWidget {
       onPressed: onPressed,
       icon: Icon(icon, size: 20),
       label: Text(label, style: GoogleFonts.cinzel(fontSize: 14, fontWeight: FontWeight.w900)),
+    );
+  }
+}
+
+class _InsuranceOptionRow extends StatelessWidget {
+  final String title;
+  final double price;
+  final InsuranceType type;
+  final Future<void> Function() onBuy;
+  final String country;
+  final bool isExtension;
+
+  const _InsuranceOptionRow({
+    required this.title,
+    required this.price,
+    required this.type,
+    required this.onBuy,
+    required this.country,
+    this.isExtension = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(_getIcon(type), color: const Color(0xFF2D1B10), size: 20),
+          const SizedBox(width: 10),
+          Expanded(child: Text(title, style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10)))),
+          TextButton(
+            onPressed: onBuy,
+            child: Text(
+              isExtension ? 'Extend (${CurrencyUtil.format(price, country)})' : CurrencyUtil.format(price, country), 
+              style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, color: Colors.blue.shade900),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _getIcon(InsuranceType type) {
+    switch (type) {
+      case InsuranceType.flood: return Icons.water;
+      case InsuranceType.storm: return Icons.cyclone;
+      case InsuranceType.drought: return Icons.sunny;
+    }
+  }
+}
+
+class _InsuranceItem extends StatelessWidget {
+  final Insurance ins;
+  final int currentDay;
+  final String country;
+  final VoidCallback onDrop;
+
+  const _InsuranceItem({required this.ins, required this.currentDay, required this.country, required this.onDrop});
+
+  @override
+  Widget build(BuildContext context) {
+    final daysLeft = ins.expiryDay - currentDay;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.blue.shade900.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${ins.type.name.toUpperCase()} Coverage', style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10))),
+                Text('Active Period: Day ${ins.expiryDay - 30} to Day ${ins.expiryDay}', 
+                    style: GoogleFonts.almendra(fontSize: 12, color: const Color(0xFF2D1B10).withOpacity(0.8))),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+            tooltip: 'Drop Policy',
+            onPressed: onDrop,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FDDurationChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FDDurationChip({required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF5D4037) : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFF5D4037)),
+        ),
+        child: Text(label, style: GoogleFonts.almendra(color: selected ? Colors.white : const Color(0xFF5D4037), fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+}
+
+class _FixedDepositItem extends StatelessWidget {
+  final FixedDeposit fd;
+  final int currentDay;
+  final String country;
+
+  const _FixedDepositItem({required this.fd, required this.currentDay, required this.country});
+
+  @override
+  Widget build(BuildContext context) {
+    final daysLeft = fd.endDay - currentDay;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF5D4037).withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('${fd.durationMonths}M Fixed Deposit', style: GoogleFonts.almendra(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text(CurrencyUtil.format(fd.principal, country), style: GoogleFonts.cinzel(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text('Interest: ${(fd.interestRate * 100).round()}% | Maturity in $daysLeft day(s)', 
+               style: GoogleFonts.almendra(fontSize: 14)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActiveLoanItem extends StatelessWidget {
+  final Loan loan;
+  final String country;
+
+  const _ActiveLoanItem({required this.loan, required this.country});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: GameColors.uiRed.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Active Loan', style: GoogleFonts.almendra(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text('Due: ${CurrencyUtil.format(loan.remainingBalance, country)}', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, color: GameColors.uiRed)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text('Interest Rate: ${(loan.interestRate * 100).round()}% | Monthly Repay: ${CurrencyUtil.format(loan.monthlyPayment, country)}', 
+               style: GoogleFonts.almendra(fontSize: 14)),
+        ],
+      ),
     );
   }
 }
