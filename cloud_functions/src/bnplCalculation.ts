@@ -115,17 +115,20 @@ async function applyInstallmentPayment(
     const isFullyPaid = nextPaidInstallments >= installments;
     const dueDateMillis = readNextDueDateMillis(plan);
     const nextDueDay = readNextDueDay(plan);
-    const nextDueDate = new Date(Math.max(Date.now(), dueDateMillis) + GAME_DAYS_PER_MONTH * DAY_MS);
-
-    await planRef.update({
-        paidInstallments: nextPaidInstallments,
-        paidMonths: nextPaidInstallments,
-        remainingAmount: Math.max(0, (installments - nextPaidInstallments) * monthlyAmount),
-        lateFees: 0,
-        nextDueDate: Timestamp.fromDate(nextDueDate),
-        nextDueDay: nextDueDay != null ? nextDueDay + GAME_DAYS_PER_MONTH : null,
-        status: isFullyPaid ? "paid" : "active",
-    });
+    const nextDueDate = new Date(dueDateMillis + GAME_DAYS_PER_MONTH * DAY_MS);
+    if (isFullyPaid) {
+        await planRef.delete();
+    } else {
+        await planRef.update({
+            paidInstallments: nextPaidInstallments,
+            paidMonths: nextPaidInstallments,
+            remainingAmount: Math.max(0, (installments - nextPaidInstallments) * monthlyAmount),
+            lateFees: 0,
+            nextDueDate: Timestamp.fromDate(nextDueDate),
+            nextDueDay: nextDueDay != null ? nextDueDay + GAME_DAYS_PER_MONTH : null,
+            status: "active",
+        });
+    }
 
     await userRef.collection("transactions").add({
         amount: amountDue,
@@ -181,24 +184,7 @@ export const repayBnplInstallment = onCall(
         }
 
         const dueGameDay = readNextDueDay(plan);
-        if (typeof currentDay === "number" && dueGameDay != null && currentDay < dueGameDay) {
-            return {
-                paidInstallment: false,
-                message: `Installment is not due yet. Next due on game day ${dueGameDay}.`,
-            };
-        }
-
-        // Legacy fallback for plans without nextDueDay.
-        if (dueGameDay == null) {
-            const dueDate = readNextDueDateMillis(plan);
-            if (Date.now() < dueDate) {
-                return {
-                    paidInstallment: false,
-                    message: "Installment is not due yet.",
-                };
-            }
-        }
-
+        // Early repayment is allowed now.
         const userRef = db.collection("users").doc(uid);
         const userDoc = await userRef.get();
         const userData = userDoc.data()!;

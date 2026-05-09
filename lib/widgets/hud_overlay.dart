@@ -482,12 +482,32 @@ class _HudOverlayState extends State<HudOverlay> {
                   ],
                 ),
                 const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => state.devRemoveAllPlants(),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.brown.shade700, foregroundColor: const Color(0xFFF4E4BC)),
+                        child: Text('CLEAR ALL', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => state.devGrowAllCrops(),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, foregroundColor: const Color(0xFFF4E4BC)),
+                        child: Text('GROW ALL', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () => state.devRemoveAllPlants(),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.brown.shade700, foregroundColor: const Color(0xFFF4E4BC)),
-                    child: Text('CLEAR ALL CROPS', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold)),
+                    onPressed: () => state.devSetMaxCredit(),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade900, foregroundColor: const Color(0xFFF4E4BC)),
+                    child: Text('MAX CREDIT SCORE', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold)),
                   ),
                 ),
                 const SizedBox(height: 16),
