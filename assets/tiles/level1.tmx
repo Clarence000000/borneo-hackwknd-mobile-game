@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.12.1" orientation="orthogonal" renderorder="right-down" width="60" height="40" tilewidth="16" tileheight="16" infinite="0" nextlayerid="13" nextobjectid="7">
+<map version="1.10" tiledversion="1.12.1" orientation="orthogonal" renderorder="right-down" width="60" height="40" tilewidth="16" tileheight="16" infinite="0" nextlayerid="14" nextobjectid="8">
  <tileset firstgid="1" name="Grass" tilewidth="16" tileheight="16" tilecount="77" columns="11">
   <image source="../images/Grass.png" width="176" height="112"/>
  </tileset>
@@ -333,5 +333,8 @@
     <property name="targetMap" type="file" value="cityhall.tmx"/>
    </properties>
   </object>
+ </objectgroup>
+ <objectgroup id="13" name="house">
+  <object id="7" name="house" x="371" y="75" width="70" height="44"/>
  </objectgroup>
 </map>
