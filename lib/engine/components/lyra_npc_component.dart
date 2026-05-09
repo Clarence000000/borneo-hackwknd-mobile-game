@@ -18,18 +18,18 @@ class LyraNpcComponent extends Component {
   static const double _spriteWorldSize = 32.0;
   static const int _frameSizePx = 32;
 
-  late final Vector2 position;
+  final Vector2 position;
   ui.Image? _spriteSheet;
   ui.Image? _uiAsset;
   bool _loaded = false;
   double _animTime = 0.0;
 
-  LyraNpcComponent({required this.gridCol, required this.gridRow});
+  LyraNpcComponent({required this.gridCol, required this.gridRow})
+      : position = Vector2(gridCol * 16.0, gridRow * 16.0);
 
   @override
   Future<void> onLoad() async {
     await super.onLoad();
-    position = Vector2(gridCol * 16.0, gridRow * 16.0);
     try {
       final data = await rootBundle.load('assets/images/character_14_frame32x32.png');
       final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());

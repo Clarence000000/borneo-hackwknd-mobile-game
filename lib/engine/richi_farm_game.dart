@@ -8,7 +8,8 @@ import 'package:flutter/painting.dart';
 
 import 'package:farm_fintech/config/constants.dart';
 import 'package:farm_fintech/config/theme.dart';
-import 'package:farm_fintech/engine/components/building_component.dart';
+import 'package:farm_fintech/engine/components/interactive_building_component.dart';
+import 'package:farm_fintech/engine/components/portal_component.dart';
 import 'package:farm_fintech/engine/components/crop_component.dart';
 import 'package:farm_fintech/engine/components/weather_effect_component.dart';
 import 'package:farm_fintech/engine/components/night_overlay_component.dart';
@@ -52,14 +53,14 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
   WeatherEffectComponent? _weatherEffect;
 
   /// Buildings on the map.
-  final List<BuildingComponent> _buildings = [];
-  List<BuildingComponent> get buildings => _buildings;
+  final List<InteractiveBuildingComponent> _buildings = [];
+  List<InteractiveBuildingComponent> get buildings => _buildings;
 
   /// The Shady Lender character on the map.
   ShadyLenderComponent? shadyLender;
 
   /// Callback when a building is tapped — set by GameScreen for navigation.
-  void Function(BuildingType type)? onBuildingTapped;
+  void Function(String type)? onBuildingTapped;
 
   /// Callback when Lyra the Oracle is tapped — set by GameScreen to show dialog.
   VoidCallback? onLyraTapped;
@@ -89,60 +90,6 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     gameState.game = this;
 
     try {
-      // ── Map Loading ──────────────────────────────────────────
-      // Load the Tiled map from assets/tiles/level1.tmx.
-      // We load it twice to separate background and foreground components
-      // so we can set different priorities (Z-indices).
-
-      // 1. Background (Priority 0): Grass, Dirt, Water, Hills
-      _mapComponent = await TiledComponent.load('level1.tmx', Vector2.all(16));
-      _mapComponent!.priority = 0;
-      // Only keep layers that are NOT 'Foreground'
-      _mapComponent!.tileMap.renderableLayers.removeWhere(
-        (layer) => layer.layer.name == 'Foreground'
-      );
-      world.add(_mapComponent!);
-
-      // 2. Foreground (Priority 20): Roofs, Tree tops, Overlays
-      _foregroundMap = await TiledComponent.load('level1.tmx', Vector2.all(16));
-      _foregroundMap.priority = 20;
-      // ONLY keep layers named 'Foreground'
-      _foregroundMap.tileMap.renderableLayers.removeWhere(
-        (layer) => layer.layer.name != 'Foreground'
-      );
-      world.add(_foregroundMap);
-
-      final map = _mapComponent!.tileMap.map;
-      _mapWidth = map.width * map.tileWidth.toDouble();
-      _mapHeight = map.height * map.tileHeight.toDouble();
-
-      // Mark farmland tiles from the TMX Tilled_Dirt layer.
-      try {
-        gameState.markFarmableFromTiled(_mapComponent!.tileMap.map);
-      } catch (e) {
-        developer.log('markFarmableFromTiled error: $e', name: 'RichiFarmGame');
-      }
-
-      // Parse ShadyLender from Tiled object layers
-      final mapComp = _mapComponent;
-      if (mapComp != null) {
-        for (final layer in mapComp.tileMap.map.layers) {
-          if (layer is ObjectGroup && layer.name == 'ShadyLender') {
-            for (final obj in layer.objects) {
-              // Handle typo 'ShadyLendar' in TMX while keeping 'ShadyLender' support
-              if (obj.name == 'ShadyLender' || obj.name == 'ShadyLendar' || obj.name.isEmpty) {
-                final lender = ShadyLenderComponent(
-                  position: Vector2(obj.x, obj.y),
-                  size: Vector2(obj.width, obj.height),
-                );
-                shadyLender = lender;
-                world.add(lender);
-              }
-            }
-          }
-        }
-      }
-
       // Pre-cache crop sprites.
       developer.log('Loading crop images...', name: 'RichiFarmGame');
       await CropImageRegistry.loadAll();
@@ -150,16 +97,13 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
 
       // ── Player character ──────────────────────────────────────
       playerComponent = PlayerComponent();
-      playerComponent!.position = Vector2((_mapWidth / 2) + 120, _mapHeight / 2);
-      playerComponent!.mapWidth = _mapWidth;
-      playerComponent!.mapHeight = _mapHeight;
+      // Position will be set in goToMap
       world.add(playerComponent!);
 
       // Keyboard handler for crop interactions
       add(InteractionKeyboardHandler());
 
-      // Joystick (always shown — on mobile it's the primary control,
-      // on desktop/web it's supplementary to WASD/arrow keys).
+      // Joystick
       joystick = JoystickComponent(
         knob: CircleComponent(
           radius: 15,
@@ -173,8 +117,7 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
       );
       camera.viewport.add(joystick!);
 
-
-      // Weather effect overlay (renders behind joystick).
+      // Weather effect overlay
       _weatherEffect = WeatherEffectComponent();
       camera.viewport.add(_weatherEffect!);
 
@@ -182,64 +125,16 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
       final nightOverlay = NightOverlayComponent();
       camera.viewport.add(nightOverlay);
 
-      // ── Buildings ──────────────────────────────────────────
-      // Bank: ~3×4 tiles, placed near top-left
-      final bank = BuildingComponent(
-        buildingType: BuildingType.bank,
-        gridCol: 2,
-        gridRow: 2,
-        buildingSize: Vector2(48, 64), // 3×4 tiles
-      );
-      _buildings.add(bank);
-      world.add(bank);
-
-      // Merchant: ~3×3 tiles, placed a bit further
-      final merchant = BuildingComponent(
-        buildingType: BuildingType.merchant,
-        gridCol: 8,
-        gridRow: 2,
-        buildingSize: Vector2(48, 48), // 3×3 tiles
-      );
-      _buildings.add(merchant);
-      world.add(merchant);
-
-      // House: ~3×3 tiles, placed to the right of the merchant
-      final house = BuildingComponent(
-        buildingType: BuildingType.house,
-        gridCol: 20,
-        gridRow: 2,
-        buildingSize: Vector2(48, 48), // 3×3 tiles
-      );
-      _buildings.add(house);
-      world.add(house);
-
-      // Parse ForestEntry zone from object layers
-      for (final layer in _mapComponent!.tileMap.map.layers) {
-        if (layer is ObjectGroup && layer.name == 'ForestEntry') {
-          for (final obj in layer.objects) {
-            _forestEntryRect = Rect.fromLTWH(
-              (obj.x as num).toDouble(),
-              (obj.y as num).toDouble(),
-              (obj.width as num?)?.toDouble() ?? 32.0,
-              (obj.height as num?)?.toDouble() ?? 32.0,
-            );
-            developer.log('ForestEntry zone: $_forestEntryRect', name: 'RichiFarmGame');
-            break;
-          }
-          break;
-        }
-      }
-
       // ── Lyra the Oracle NPC ────────────────────────────────────
-      // Place her to the right of the merchant building
       _lyraNpc = LyraNpcComponent(gridCol: 12, gridRow: 3);
       world.add(_lyraNpc!);
 
-      // Set up camera.
-      _setupCamera();
-
       // Sync weather visuals if a disaster was already active.
       _weatherEffect?.setWeather(gameState.activeDisaster);
+
+      // Load initial map
+      await goToMap('level1.tmx', 'default');
+
     } catch (e, stack) {
       developer.log(
         'FATAL: onLoad failed — $e',
@@ -247,8 +142,6 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
         error: e,
         stackTrace: stack,
       );
-      // Game will render but remain empty. The error won't crash
-      // the update loop because all fields are nullable now.
     }
   }
 
@@ -263,6 +156,11 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
   @override
   void update(double dt) {
     super.update(dt);
+
+    if (_portalCooldown > 0) {
+      _portalCooldown -= dt;
+    }
+
     // Guard: if onLoad failed, _mapComponent will be null
     if (_mapComponent == null) return;
     _updateCamera();
@@ -388,10 +286,10 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     for (final building in _buildings) {
       if (building.containsWorldPoint(worldX, worldY)) {
         developer.log(
-          'Tap → building ${building.buildingType.name}',
+          'Tap → building ${building.type}',
           name: 'RichiFarmGame',
         );
-        onBuildingTapped?.call(building.buildingType);
+        onBuildingTapped?.call(building.type);
         return; // Don't select a tile if we tapped a building.
       }
     }
@@ -499,5 +397,153 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     player.position = Vector2((_mapWidth / 2) + 120, _mapHeight / 2);
     _setupCamera(); // Re-center the camera
     developer.log('Respawned player near map center.', name: 'RichiFarmGame');
+  }
+
+  bool isTransitioningMap = false;
+  String currentMapName = 'level1.tmx';
+  double _portalCooldown = 0.0;
+
+  bool get canUsePortal => !isTransitioningMap && _portalCooldown <= 0;
+
+
+
+  Future<void> goToMap(String mapName, String spawnPointName) async {
+    if (isTransitioningMap) return;
+    isTransitioningMap = true;
+    currentMapName = mapName;
+
+    try {
+      // 1. Clean current scene
+      final toRemove = world.children.where((c) => c != playerComponent).toList();
+      world.removeAll(toRemove);
+
+      _buildings.clear();
+      _cropComponents.clear();
+      shadyLender = null;
+      _lyraNpc = null;
+      _forestEntryTriggered = false;
+      _forestEntryRect = Rect.zero;
+
+      // 2. Load new Tiled map
+      _mapComponent = await TiledComponent.load(mapName, Vector2.all(16));
+      _mapComponent!.priority = 0;
+      _mapComponent!.tileMap.renderableLayers.removeWhere((l) => l.layer.name == 'Foreground');
+      world.add(_mapComponent!);
+
+      _foregroundMap = await TiledComponent.load(mapName, Vector2.all(16));
+      _foregroundMap.priority = 20;
+      _foregroundMap.tileMap.renderableLayers.removeWhere((l) => l.layer.name != 'Foreground');
+      world.add(_foregroundMap);
+
+      final map = _mapComponent!.tileMap.map;
+      _mapWidth = map.width * map.tileWidth.toDouble();
+      _mapHeight = map.height * map.tileHeight.toDouble();
+
+      if (playerComponent != null) {
+        playerComponent!.mapWidth = _mapWidth;
+        playerComponent!.mapHeight = _mapHeight;
+      }
+
+      if (mapName == 'level1.tmx') {
+        gameState.markFarmableFromTiled(map);
+      }
+
+      // 3. Scan objects
+      for (final layer in map.layers) {
+        if (layer is ObjectGroup) {
+          for (final obj in layer.objects) {
+            // Portals
+            if (layer.name == 'to_cityhall' || obj.name == 'to_cityhall') {
+               world.add(PortalComponent(
+                 targetMap: 'cityhall.tmx',
+                 spawnPointName: 'to_farm',
+                 position: Vector2(obj.x, obj.y),
+                 size: Vector2(obj.width, obj.height),
+               ));
+            } else if (layer.name == 'spawn_from_farm' || obj.name == 'to_farm') {
+               world.add(PortalComponent(
+                 targetMap: 'level1.tmx',
+                 spawnPointName: 'to_cityhall',
+                 position: Vector2(obj.x, obj.y),
+                 size: Vector2(obj.width, obj.height),
+               ));
+            }
+
+            // Buildings
+            if (layer.name == 'bank' || obj.name == 'bank' || layer.name == 'merchant' || obj.name == 'merchant' || layer.name == 'house' || obj.name == 'house') {
+               // Fallback if type is missing, infer from name
+               String bType = obj.name;
+               if (bType.isEmpty && layer.name.isNotEmpty) bType = layer.name;
+               
+               if (['bank', 'merchant', 'house'].contains(bType)) {
+                 final building = InteractiveBuildingComponent(
+                   type: bType,
+                   position: Vector2(obj.x, obj.y),
+                   size: Vector2(obj.width, obj.height),
+                 );
+                 _buildings.add(building);
+                 world.add(building);
+               }
+            }
+
+            // Shady Lender
+            if (layer.name == 'ShadyLender' || obj.name == 'ShadyLender' || obj.name == 'ShadyLendar' || obj.name == 'ShadyLneder') {
+                final lender = ShadyLenderComponent(
+                  position: Vector2(obj.x, obj.y),
+                  size: Vector2(obj.width, obj.height),
+                );
+                shadyLender = lender;
+                world.add(lender);
+            }
+
+            // ForestEntry
+            if (layer.name == 'ForestEntry') {
+               _forestEntryRect = Rect.fromLTWH(obj.x, obj.y, obj.width, obj.height);
+            }
+
+            // Player Spawn Pos
+            if (spawnPointName != 'default' && obj.name == spawnPointName) {
+               double spawnX = obj.x + obj.width / 2;
+               double spawnY;
+               
+               if (mapName == 'cityhall.tmx') {
+                 // Cityhall portal is at the bottom, so spawn ABOVE it
+                 spawnY = obj.y - 40;
+               } else {
+                 // Level1 portal is at the top, so spawn BELOW it
+                 spawnY = obj.y + obj.height + 32;
+               }
+
+               if (playerComponent != null) {
+                 playerComponent!.position = Vector2(spawnX, spawnY);
+               }
+            }
+          }
+        }
+      }
+
+      if (spawnPointName == 'default' && playerComponent != null) {
+         playerComponent!.position = Vector2((_mapWidth / 2) + 120, _mapHeight / 2);
+      }
+
+      if (mapName == 'level1.tmx') {
+        _lyraNpc = LyraNpcComponent(gridCol: 12, gridRow: 3);
+        world.add(_lyraNpc!);
+        syncCropsFromGameState();
+      }
+
+      // 4. Camera Setup
+      _setupCamera();
+      if (playerComponent != null) {
+        camera.viewfinder.position = playerComponent!.position;
+        _clampCamera();
+      }
+
+    } catch (e, stack) {
+      developer.log('goToMap failed: $e', name: 'RichiFarmGame', error: e, stackTrace: stack);
+    } finally {
+      isTransitioningMap = false;
+      _portalCooldown = 1.0;
+    }
   }
 }

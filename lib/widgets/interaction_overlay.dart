@@ -4,7 +4,7 @@ import 'package:flame/components.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:farm_fintech/config/constants.dart';
-import 'package:farm_fintech/engine/components/building_component.dart';
+import 'package:farm_fintech/engine/components/interactive_building_component.dart';
 import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/engine/richi_farm_game.dart';
 
@@ -39,10 +39,10 @@ class InteractionOverlay extends StatelessWidget {
           worldPos = Vector2(lender.position.x + lender.size.x, lender.position.y + lender.size.y / 2);
         } else if (state.interactableBuilding != null) {
           final building = state.interactableBuilding!;
-          if (building.buildingType == BuildingType.bank) {
-            options.add(_buildOption('F', 'Bank', () => game.onBuildingTapped?.call(building.buildingType)));
-          } else if (building.buildingType == BuildingType.merchant) {
-            options.add(_buildOption('F', 'Merchant', () => game.onBuildingTapped?.call(building.buildingType)));
+          if (building.type == 'bank') {
+            options.add(_buildOption('F', 'Bank', () => game.onBuildingTapped?.call(building.type)));
+          } else if (building.type == 'merchant') {
+            options.add(_buildOption('F', 'Merchant', () => game.onBuildingTapped?.call(building.type)));
           }
           worldPos = Vector2(building.position.x + building.size.x, building.position.y + building.size.y / 2);
         } else if (state.isNearLyra && game.lyraNpc != null) {

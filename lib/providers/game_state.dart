@@ -16,7 +16,7 @@ import 'package:farm_fintech/models/weather_event.dart';
 import 'package:farm_fintech/services/cloud_functions_service.dart';
 import 'package:farm_fintech/services/firestore_service.dart';
 import 'package:farm_fintech/services/weather_service.dart';
-import 'package:farm_fintech/engine/components/building_component.dart';
+import 'package:farm_fintech/engine/components/interactive_building_component.dart';
 import 'package:farm_fintech/engine/components/shady_lender_component.dart';
 import 'package:farm_fintech/services/gemini_service.dart';
 
@@ -86,7 +86,7 @@ class GameState extends ChangeNotifier {
 
   // ── Interaction ───────────────────────────────────────────────
   (int, int)? interactableTile;
-  BuildingComponent? interactableBuilding;
+  InteractiveBuildingComponent? interactableBuilding;
   ShadyLenderComponent? interactableShadyLender;
   bool showShadyDialogue = false;
   bool isNearLyra = false;
@@ -114,7 +114,7 @@ class GameState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateInteractableBuilding(BuildingComponent? building) {
+  void updateInteractableBuilding(InteractiveBuildingComponent? building) {
     if (interactableBuilding == building) return;
     interactableBuilding = building;
     interactionMenuState = InteractionMenuState.main;
@@ -169,7 +169,8 @@ class GameState extends ChangeNotifier {
   void handleInteractionKey(int key) {
     if (interactableBuilding != null) {
       if (key == 1 && interactionMenuState == InteractionMenuState.main) {
-        game?.onBuildingTapped?.call(interactableBuilding!.buildingType);
+        // Trigger the building overlay
+        game?.onBuildingTapped?.call(interactableBuilding!.type);
       }
       return;
     }

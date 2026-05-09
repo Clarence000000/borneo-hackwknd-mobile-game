@@ -3,7 +3,7 @@ import 'package:flame/sprite.dart';
 import 'package:flutter/services.dart';
 
 import 'package:farm_fintech/engine/richi_farm_game.dart';
-import 'package:farm_fintech/engine/components/building_component.dart';
+import 'package:farm_fintech/engine/components/interactive_building_component.dart';
 
 /// Character animation states (idle + walk × 4 directions).
 enum PlayerState {
@@ -124,6 +124,8 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
 
   @override
   void update(double dt) {
+    if (game.isTransitioningMap) return;
+
     var dx = _horizontalDirection.toDouble();
     var dy = _verticalDirection.toDouble();
 
@@ -201,15 +203,17 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
     final mapRow = (position.y / 16).floor();
     
     // 1. Check building proximity
-    BuildingComponent? closestBuilding;
+    InteractiveBuildingComponent? closestBuilding;
     double minBldgDistSq = double.infinity;
     for (final building in game.buildings) {
-      final bx = building.position.x + building.size.x / 2;
-      final by = building.position.y + building.size.y / 2;
-      final dx = position.x - bx;
-      final dy = position.y - by;
+      double nearestX = position.x.clamp(building.position.x, building.position.x + building.size.x);
+      double nearestY = position.y.clamp(building.position.y, building.position.y + building.size.y);
+      final dx = position.x - nearestX;
+      final dy = position.y - nearestY;
       final distSq = dx * dx + dy * dy;
-      if (distSq < 48 * 48 && distSq < minBldgDistSq) {
+      
+      // Strict distance check: 50 pixels from the edge of the building
+      if (distSq <= 50 * 50 && distSq < minBldgDistSq) {
         minBldgDistSq = distSq;
         closestBuilding = building;
       }
@@ -248,6 +252,12 @@ class PlayerComponent extends SpriteAnimationGroupComponent<PlayerState>
 
     // If near a building, shady lender, or Lyra, skip tile interaction.
     if (closestBuilding != null || nearShadyLender || isNearLyra) {
+      game.gameState.updateInteractableTile(null);
+      return;
+    }
+
+    // Only allow crop interaction in the farm map
+    if (game.currentMapName != 'level1.tmx') {
       game.gameState.updateInteractableTile(null);
       return;
     }
