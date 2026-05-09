@@ -61,34 +61,40 @@ class _GameScreenState extends State<GameScreen> {
     _game = RichiFarmGame(gameState: state);
     state.game = _game; // Wire up so GameState can sync crop sprites
 
+    bool isBuildingDialogOpen = false;
+
     // Navigate to the appropriate screen when the player taps a building.
     _game.onBuildingTapped = (String type) {
-      if (!mounted) return;
+      if (!mounted || isBuildingDialogOpen) return;
+      isBuildingDialogOpen = true;
+
+      Future<void> showBuildingDialog(Widget screen) async {
+        await showGeneralDialog(
+          context: context,
+          barrierDismissible: false, // BookUI has its own X button — avoid double-pop
+          barrierLabel: '',
+          barrierColor: Colors.transparent, // BookUI provides its own dark overlay
+          pageBuilder: (dialogCtx, anim1, anim2) => screen,
+        );
+        isBuildingDialogOpen = false;
+      }
+
       switch (type) {
         case 'house':
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const HouseScreen()),
-          );
+          ).then((_) => isBuildingDialogOpen = false);
           break;
         case 'bank':
-          showGeneralDialog(
-            context: context,
-            barrierDismissible: true,
-            barrierLabel: '',
-            pageBuilder: (dialogCtx, anim1, anim2) => const BankScreen(),
-          );
+          showBuildingDialog(const BankScreen());
           break;
         case 'merchant':
-          showGeneralDialog(
-            context: context,
-            barrierDismissible: true,
-            barrierLabel: '',
-            pageBuilder: (dialogCtx, anim1, anim2) => const MerchantScreen(),
-          );
+          showBuildingDialog(const MerchantScreen());
           break;
       }
     };
+
 
     _game.onForestEntry = () {
       if (!mounted) return;

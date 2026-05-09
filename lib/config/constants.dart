@@ -42,25 +42,26 @@ const Map<CropType, Map<String, dynamic>> kCropConfig = {
     'name': 'Wheat',
     'growthDays': 3,
     'seedCost': 10.0,
-    'sellPrice': 30.0,
+    'sellPrice': 20.0,
   },
   CropType.rice: {
     'name': 'Paddy',
     'growthDays': 5,
     'seedCost': 20.0,
-    'sellPrice': 60.0,
+    'sellPrice': 40.0,
   },
   CropType.corn: {
     'name': 'Corn',
     'growthDays': 4,
     'seedCost': 15.0,
-    'sellPrice': 45.0,
+    'sellPrice': 30.0,
   },
 };
 
 // ─── BNPL Config ───────────────────────────────────────────────
 const double kBnplAdminFee = 10.0;
 const double kBnplLateFee = 23.0;
+const double kBnplLateFeePercent = 0.50; // 50% penalty
 const List<int> kBnplInstallmentOptions = [3, 6];
 
 // ─── Loan Config ───────────────────────────────────────────────

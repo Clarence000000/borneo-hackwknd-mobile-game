@@ -1079,7 +1079,7 @@ class _InsuranceItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('${ins.type.name.toUpperCase()} Coverage', style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10))),
-                Text('Active Period: Day ${ins.expiryDay - 30} to Day ${ins.expiryDay}', 
+                Text('Active Period: $daysLeft days remaining', 
                     style: GoogleFonts.almendra(fontSize: 12, color: const Color(0xFF2D1B10).withOpacity(0.8))),
               ],
             ),
