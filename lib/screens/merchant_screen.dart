@@ -534,18 +534,20 @@ class _EquipmentCard extends StatelessWidget {
                           ),
                           ElevatedButton(
                             onPressed: () async {
-                              Navigator.pop(ctx, false);
-                              await FinancialAdvisor.warnBnpl(context, player, state.bnplPlans.length);
-                              await state.purchaseWithBnpl(equipment.name, equipment.price, 6);
+                              final proceed = await FinancialAdvisor.warnBnpl(context, player, state.bnplPlans.length);
+                              if (proceed && context.mounted) {
+                                await state.purchaseWithBnpl(equipment.name, equipment.price, 6);
+                              }
                             },
                             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D4037), foregroundColor: const Color(0xFFF4E4BC)),
                             child: Text('BNPL 6 MO', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold)),
                           ),
                           ElevatedButton(
                             onPressed: () async {
-                              Navigator.pop(ctx, false);
-                              await FinancialAdvisor.warnBnpl(context, player, state.bnplPlans.length);
-                              await state.purchaseWithBnpl(equipment.name, equipment.price, 3);
+                              final proceed = await FinancialAdvisor.warnBnpl(context, player, state.bnplPlans.length);
+                              if (proceed && context.mounted) {
+                                await state.purchaseWithBnpl(equipment.name, equipment.price, 3);
+                              }
                             },
                             style: ElevatedButton.styleFrom(backgroundColor: Colors.brown.shade800, foregroundColor: const Color(0xFFF4E4BC)),
                             child: Text('BNPL 3 MO', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold)),
@@ -869,10 +871,12 @@ class _SeedCardState extends State<_SeedCard> {
                         TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Cancel', style: GoogleFonts.cinzel(color: const Color(0xFF5D4037), fontWeight: FontWeight.bold))),
                         ElevatedButton(
                           onPressed: () async {
-                            Navigator.pop(ctx, false);
-                            final success = await widget.state.purchaseWithBnpl('$name Seeds (x$_quantity)', totalPrice, 6); // Defaulting to 6 for now, or could show options
-                            if (success && context.mounted) {
-                              widget.state.buySeeds(widget.type, _quantity, free: true); // Add seeds to inventory without deducting cash again
+                            final proceed = await FinancialAdvisor.warnBnpl(context, widget.player, widget.state.bnplPlans.length);
+                            if (proceed && context.mounted) {
+                              final success = await widget.state.purchaseWithBnpl('$name Seeds (x$_quantity)', totalPrice, 6); // Defaulting to 6 for now, or could show options
+                              if (success && context.mounted) {
+                                widget.state.buySeeds(widget.type, _quantity, free: true); // Add seeds to inventory without deducting cash again
+                              }
                             }
                           },
                           style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D4037), foregroundColor: const Color(0xFFF4E4BC)),
@@ -880,10 +884,12 @@ class _SeedCardState extends State<_SeedCard> {
                         ),
                         ElevatedButton(
                           onPressed: () async {
-                            Navigator.pop(ctx, false);
-                            final success = await widget.state.purchaseWithBnpl('$name Seeds (x$_quantity)', totalPrice, 3);
-                            if (success && context.mounted) {
-                              widget.state.buySeeds(widget.type, _quantity, free: true); // Add seeds
+                            final proceed = await FinancialAdvisor.warnBnpl(context, widget.player, widget.state.bnplPlans.length);
+                            if (proceed && context.mounted) {
+                              final success = await widget.state.purchaseWithBnpl('$name Seeds (x$_quantity)', totalPrice, 3);
+                              if (success && context.mounted) {
+                                widget.state.buySeeds(widget.type, _quantity, free: true); // Add seeds
+                              }
                             }
                           },
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.brown.shade800, foregroundColor: const Color(0xFFF4E4BC)),
