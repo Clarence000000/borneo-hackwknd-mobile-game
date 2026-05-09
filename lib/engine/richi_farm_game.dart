@@ -510,8 +510,8 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
                  // Cityhall portal is at the bottom, so spawn ABOVE it
                  spawnY = obj.y - 40;
                } else {
-                 // Level1 portal is at the top, so spawn BELOW it
-                 spawnY = obj.y + obj.height + 32;
+                 // Level1 portal is at the top, so spawn BELOW it, but not too far into the hills
+                 spawnY = obj.y + obj.height + 10;
                }
 
                if (playerComponent != null) {
