@@ -407,7 +407,13 @@ class _HudOverlayState extends State<HudOverlay> {
         backgroundColor: const Color(0xFFF4E4BC),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: Color(0xFF5D4037), width: 4)),
         title: Text('Trigger Chaos', style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, color: textColor)),
-        content: Text('Choose a disaster to test your farm.', style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: textColor, fontSize: 18)),
+        content: Text(
+          'Choose a disaster to test your farm:\n'
+          '• Flood: 100% destruction\n'
+          '• Storm: 70% destruction\n'
+          '• Drought: Downgrade to sprout stage',
+          style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: textColor, fontSize: 14),
+        ),
         actions: [
           _disasterButton('Flood', Colors.blue.shade900, () => state.triggerDisaster(DisasterType.flood)),
           _disasterButton('Storm', Colors.red.shade900, () => state.triggerDisaster(DisasterType.storm)),
@@ -500,6 +506,15 @@ class _HudOverlayState extends State<HudOverlay> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => state.devRandomlyPlant(),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade900, foregroundColor: const Color(0xFFF4E4BC)),
+                    child: Text('RANDOM PLANT', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold)),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 SizedBox(

@@ -75,7 +75,7 @@ class InteractionOverlay extends StatelessWidget {
             if (!tile.hasCrop) {
               options.add(_buildOption('F', 'Plant Crop', () => state.setInteractionMenuState(InteractionMenuState.plant)));
             } else if (tile.isHarvestable) {
-              options.add(_buildOption('1', 'Harvest', () => state.setInteractionMenuState(InteractionMenuState.harvest)));
+              options.add(_buildOption('1', 'Harvest', () => state.harvestCropInteraction()));
               options.add(_buildOption('2', 'Remove Plant', () => state.setInteractionMenuState(InteractionMenuState.confirmRemove)));
             } else {
               options.add(_buildOption('F', 'Remove Plant', () => state.setInteractionMenuState(InteractionMenuState.confirmRemove)));
@@ -97,9 +97,6 @@ class InteractionOverlay extends StatelessWidget {
             options.add(_buildOption('2', 'Paddy ($riceSeeds)', riceSeeds >= 1 ? () => state.plantCropInteraction(CropType.rice) : null));
             options.add(_buildOption('3', 'Corn ($cornSeeds)', cornSeeds >= 1 ? () => state.plantCropInteraction(CropType.corn) : null));
             options.add(_buildOption('ESC', 'Back', () => state.setInteractionMenuState(InteractionMenuState.main)));
-          } else if (state.interactionMenuState == InteractionMenuState.harvest) {
-            options.add(_buildOption('1', 'Store', () => state.harvestCropInteraction(sell: false)));
-            options.add(_buildOption('2', 'Sell', () => state.harvestCropInteraction(sell: true)));
           } else if (state.interactionMenuState == InteractionMenuState.confirmRemove) {
             options.add(Padding(
               padding: const EdgeInsets.only(bottom: 6.0),

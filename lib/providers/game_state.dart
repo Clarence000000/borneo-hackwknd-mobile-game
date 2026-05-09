@@ -205,7 +205,7 @@ class GameState extends ChangeNotifier {
       } else if (tile.isHarvestable) {
         // Ready tile: 1. Harvest, 2. Remove
         if (key == 1) {
-          setInteractionMenuState(InteractionMenuState.harvest);
+          harvestCropInteraction();
         } else if (key == 2) {
           setInteractionMenuState(InteractionMenuState.confirmRemove);
         }
@@ -220,10 +220,6 @@ class GameState extends ChangeNotifier {
         plantCropInteraction(CropType.wheat);
       } else if (key == 2) plantCropInteraction(CropType.rice);
       else if (key == 3) plantCropInteraction(CropType.corn);
-    } else if (interactionMenuState == InteractionMenuState.harvest) {
-      if (key == 1) {
-        harvestCropInteraction(sell: false);
-      } else if (key == 2) harvestCropInteraction(sell: true);
     } else if (interactionMenuState == InteractionMenuState.confirmRemove) {
       if (key == 1) {
         removeCrop();
@@ -244,13 +240,10 @@ class GameState extends ChangeNotifier {
     setInteractionMenuState(InteractionMenuState.main);
   }
 
-  Future<void> harvestCropInteraction({required bool sell}) async {
+  Future<void> harvestCropInteraction() async {
     final oldSelected = selectedTile;
     selectedTile = interactableTile;
-    final harvested = await harvestCrop();
-    if (harvested != null && sell) {
-      await sellInventoryCrop(harvested.name, quantity: 1);
-    }
+    await harvestCrop();
     selectedTile = oldSelected;
     setInteractionMenuState(InteractionMenuState.main);
   }
@@ -936,6 +929,33 @@ class GameState extends ChangeNotifier {
           tile.growthStage = 3;
           tile.farmState = FarmPlotState.ready;
           tile.readyDay ??= currentDay;
+        }
+      }
+    }
+    await _saveGridState();
+    game?.syncCropsFromGameState();
+    notifyListeners();
+  }
+
+  /// Developer Option: Randomly plant many seeds on farmland
+  Future<void> devRandomlyPlant() async {
+    final crops = CropType.values;
+    for (final row in grid) {
+      for (final tile in row) {
+        if (tile.isFarmland && !tile.hasCrop) {
+          // 20% chance to plant on each farmland tile
+          if (_random.nextDouble() < 0.2) {
+            final randomCrop = crops[_random.nextInt(crops.length)];
+            tile.plant(randomCrop, currentDay: currentDay);
+            // Randomly set growth stage (0-3)
+            tile.growthStage = _random.nextInt(4);
+            if (tile.growthStage >= 3) {
+              tile.farmState = FarmPlotState.ready;
+              tile.readyDay = currentDay;
+            } else if (tile.growthStage >= 1) {
+              tile.farmState = FarmPlotState.growing;
+            }
+          }
         }
       }
     }
@@ -1713,10 +1733,13 @@ class GameState extends ChangeNotifier {
               totalPayout += seedCost + (sellPrice - seedCost) * 0.8;
             }
           } else if (type == DisasterType.storm) {
-            tile.destroyCrop();
-            destroyedCount++;
-            if (hasInsurance) {
-              totalPayout += seedCost + (sellPrice - seedCost) * 0.8;
+            // Storm destroys 70% of crops randomly
+            if (_random.nextDouble() < 0.7) {
+              tile.destroyCrop();
+              destroyedCount++;
+              if (hasInsurance) {
+                totalPayout += seedCost + (sellPrice - seedCost) * 0.8;
+              }
             }
           } else if (type == DisasterType.drought) {
             // Downgrade to initial state
