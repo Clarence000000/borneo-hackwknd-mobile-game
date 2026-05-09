@@ -21,6 +21,7 @@ import 'package:farm_fintech/engine/components/interactive_building_component.da
 import 'package:farm_fintech/engine/components/shady_lender_component.dart';
 import 'package:farm_fintech/services/gemini_service.dart';
 import 'package:farm_fintech/services/credit_score_service.dart';
+import 'package:farm_fintech/utils/currency_util.dart';
 
 enum InteractionMenuState { main, plant, harvest, confirmRemove, lyra }
 
@@ -1005,12 +1006,21 @@ class GameState extends ChangeNotifier {
     final cost = (config['seedCost'] as double) * quantity;
 
     if (!free) {
-      if (player!.cashBalance + player!.bankBalance < cost) return false;
+      if (player!.cashBalance + player!.bankBalance < cost) {
+        addNotification('Insufficient funds for seeds!', icon: Icons.error_outline, color: Colors.red);
+        return false;
+      }
 
+      bool success = false;
       if (player!.cashBalance >= cost) {
-        player!.pay(cost, method: PaymentMethod.cash);
+        success = player!.pay(cost, method: PaymentMethod.cash);
       } else {
-        player!.pay(cost, method: PaymentMethod.bank);
+        success = player!.pay(cost, method: PaymentMethod.bank);
+      }
+      
+      if (!success) {
+        addNotification('Payment failed!', icon: Icons.error_outline, color: Colors.red);
+        return false;
       }
       _addMonthlyExpense('seed', cost);
     }
@@ -1085,6 +1095,32 @@ class GameState extends ChangeNotifier {
     await _saveGridState();
     game?.syncCropsFromGameState();
     notifyListeners();
+  }
+
+  /// Developer Option: Harvest All Ready Crops
+  Future<void> devHarvestAll() async {
+    if (player == null) return;
+    int count = 0;
+    for (int r = 0; r < grid.length; r++) {
+      for (int c = 0; c < grid[r].length; c++) {
+        final tile = grid[r][c];
+        if (tile.farmState == FarmPlotState.ready) {
+          final harvested = tile.harvest();
+          if (harvested != null) {
+            final key = harvested.name;
+            player!.inventory[key] = (player!.inventory[key] ?? 0) + 1;
+            game?.removeCropComponent(c, r);
+            count++;
+          }
+        }
+      }
+    }
+    if (count > 0) {
+      await _savePlayerState();
+      await _saveGridState();
+      notifyListeners();
+      addNotification('Dev: Harvested $count crops!', icon: Icons.auto_awesome, color: Colors.purple);
+    }
   }
 
   /// Developer Option: Randomly plant many seeds on farmland
@@ -1339,6 +1375,7 @@ class GameState extends ChangeNotifier {
     try {
       await _savePlayerState();
       updateQuestProgress(QuestType.cash, revenue);
+      addNotification('Sold crops for ${CurrencyUtil.format(revenue, player!.country)}!', icon: Icons.monetization_on, color: Colors.green.shade900);
       notifyListeners();
       return revenue;
     } catch (_) {
@@ -1354,8 +1391,17 @@ class GameState extends ChangeNotifier {
 
     final previousCashBalance = player!.cashBalance;
     final previousBankBalance = player!.bankBalance;
-    final didPay = player!.pay(amount, method: method);
-    if (!didPay) return false;
+    bool didPay = false;
+    if (player!.cashBalance >= amount) {
+      didPay = player!.pay(amount, method: PaymentMethod.cash);
+    } else {
+      didPay = player!.pay(amount, method: PaymentMethod.bank);
+    }
+    
+    if (!didPay) {
+      addNotification('Insufficient funds for equipment!', icon: Icons.error_outline, color: Colors.red);
+      return false;
+    }
     _addMonthlyExpense('equipment', amount);
 
     try {
@@ -1363,10 +1409,11 @@ class GameState extends ChangeNotifier {
       notifyListeners();
       addNotification('Successfully purchased equipment!', icon: Icons.shopping_cart, color: Colors.blue.shade700);
       return true;
-    } catch (_) {
+    } catch (e) {
       player!.cashBalance = previousCashBalance;
       player!.bankBalance = previousBankBalance;
       _addMonthlyExpense('equipment', -amount);
+      addNotification('Purchase failed: $e', icon: Icons.error_outline, color: Colors.red);
       return false;
     }
   }
@@ -2063,7 +2110,10 @@ class GameState extends ChangeNotifier {
   Future<bool> buyInsurance(InsuranceType type, double price) async {
     if (player == null) return false;
     
-    if (player!.cashBalance < price && player!.bankBalance < price) return false;
+    if (player!.cashBalance + player!.bankBalance < price) {
+      addNotification('Insufficient funds for insurance!', icon: Icons.error_outline, color: Colors.red);
+      return false;
+    }
     
     if (player!.cashBalance >= price) {
       player!.pay(price, method: PaymentMethod.cash);
@@ -2101,8 +2151,11 @@ class GameState extends ChangeNotifier {
   Future<bool> buyComprehensiveInsurance(double totalPrice) async {
     if (player == null) return false;
     
-    if (player!.cashBalance < totalPrice && player!.bankBalance < totalPrice) return false;
-    
+    if (player!.cashBalance + player!.bankBalance < totalPrice) {
+      addNotification('Insufficient funds for insurance!', icon: Icons.error_outline, color: Colors.red);
+      return false;
+    }
+
     if (player!.cashBalance >= totalPrice) {
       player!.pay(totalPrice, method: PaymentMethod.cash);
     } else {

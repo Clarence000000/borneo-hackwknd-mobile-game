@@ -506,8 +506,8 @@ class _HudOverlayState extends State<HudOverlay> {
                 Slider(
                   value: skipDays.toDouble(),
                   min: 1,
-                  max: 30,
-                  divisions: 29,
+                  max: 90,
+                  divisions: 89,
                   activeColor: const Color(0xFF5D4037),
                   inactiveColor: const Color(0xFF5D4037).withOpacity(0.2),
                   onChanged: (val) => setState(() => skipDays = val.toInt()),
@@ -566,13 +566,24 @@ class _HudOverlayState extends State<HudOverlay> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => state.devRandomlyPlant(),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade900, foregroundColor: const Color(0xFFF4E4BC)),
-                    child: Text('RANDOM PLANT', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold)),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => state.devRandomlyPlant(),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade900, foregroundColor: const Color(0xFFF4E4BC)),
+                        child: Text('RANDOM PLANT', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => state.devHarvestAll(),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.purple.shade900, foregroundColor: const Color(0xFFF4E4BC)),
+                        child: Text('HARVEST ALL', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 SizedBox(

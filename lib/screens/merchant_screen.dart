@@ -421,7 +421,8 @@ class _EquipmentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const textColor = Color(0xFF2D1B10);
-    final canBuyWithCash = player.cashBalance >= equipment.price;
+    final totalBalance = player.cashBalance + player.bankBalance;
+    final canAfford = totalBalance >= equipment.price;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -469,7 +470,7 @@ class _EquipmentCard extends StatelessWidget {
             children: [
               Expanded(
                 child: ElevatedButton(
-                  onPressed: canBuyWithCash
+                  onPressed: canAfford
                       ? () async {
                           final success = await state.buyEquipment(
                             equipment.price,
@@ -695,7 +696,9 @@ class _MarketSellSection extends StatelessWidget {
                 ),
               ),
               ElevatedButton(
-                onPressed: () => state.sellInventoryCrop(entry.key),
+                onPressed: () async {
+                  await state.sellInventoryCrop(entry.key);
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green.shade900,
                   foregroundColor: const Color(0xFFF4E4BC),
@@ -904,7 +907,7 @@ class _SeedCardState extends State<_SeedCard> {
               ),
               const SizedBox(width: 8),
               ElevatedButton(
-                onPressed: () => widget.state.buySeeds(widget.type, _quantity),
+                onPressed: () async => await widget.state.buySeeds(widget.type, _quantity),
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D4037), foregroundColor: const Color(0xFFF4E4BC)),
                 child: Text('BUY CASH', style: GoogleFonts.cinzel(fontSize: 12, fontWeight: FontWeight.w900)),
               ),

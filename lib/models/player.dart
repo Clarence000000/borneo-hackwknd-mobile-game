@@ -85,7 +85,7 @@ class Player {
 
   /// Pay from the specified method. Returns true if sufficient balance.
   bool pay(double amount, {required PaymentMethod method}) {
-    if (isAdmin) return true;
+    // Admin no longer has unlimited free payments so they can test deductions.
 
     switch (method) {
       case PaymentMethod.cash:
