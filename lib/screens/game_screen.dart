@@ -212,6 +212,8 @@ class _GameScreenState extends State<GameScreen> {
 
           _scheduleMonthlyReportDialog(state);
           _handleLoanSharkThreatEffects(state);
+          _scheduleRentCollectionDialog(state);
+          _scheduleGameOverDialog(state);
           return Stack(
             children: [
               // ── Layer 0: Flame Game (Tiled map + camera) ────
@@ -619,9 +621,362 @@ class _GameScreenState extends State<GameScreen> {
         buttonText: 'Continue',
       ).then((_) {
         if (!mounted) return;
-        state.acknowledgeMonthlyReport();
         _showingMonthlyReport = false;
+        state.acknowledgeMonthlyReport();
       });
+    });
+  }
+
+  bool _showingRentDialog = false;
+  bool _showingGameOver = false;
+
+  void _scheduleRentCollectionDialog(GameState state) {
+    if (_showingRentDialog || !state.pendingRentCollection || !mounted) return;
+    if (_showingMonthlyReport) return; // Wait for monthly report to close first
+
+    _showingRentDialog = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        _showingRentDialog = false;
+        return;
+      }
+
+      final country = state.player?.country ?? 'MY';
+      final rent = state.currentRentAmount;
+      final overdue = state.totalOverdueBnplDebt;
+      final totalDue = rent + overdue;
+      final totalBalance = (state.player?.cashBalance ?? 0) + (state.player?.bankBalance ?? 0);
+      final canPay = totalBalance >= totalDue;
+      final paymentNumber = (state.player?.rentPaymentCount ?? 0) + 1;
+
+      // Build overdue BNPL breakdown
+      final overduePlans = state.bnplPlans.where((p) =>
+          p.nextDueDay != null && p.nextDueDay! <= state.currentDay).toList();
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            backgroundColor: const Color(0xFF1A0A0A),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(
+                color: Colors.red.shade900,
+                width: 3,
+              ),
+            ),
+            title: Row(
+              children: [
+                Image.asset(
+                  'assets/images/shady_lender.png',
+                  width: 48,
+                  height: 48,
+                  errorBuilder: (_, __, ___) => Icon(Icons.person, color: Colors.red.shade400, size: 48),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '🦈 RENT COLLECTION',
+                        style: GoogleFonts.cinzel(
+                          color: const Color(0xFFFF4444),
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
+                        ),
+                      ),
+                      Text(
+                        'Payment #$paymentNumber',
+                        style: GoogleFonts.almendra(
+                          color: Colors.grey.shade500,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Shady lender dialogue
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.withOpacity(0.3)),
+                    ),
+                    child: Text(
+                      paymentNumber <= 1
+                          ? '"Time to pay up, farmer. This land ain\'t free. You\'ve been here 3 months — rent is due."'
+                          : '"Back again... Rent goes up every time, you know that. Pay up or get out."',
+                      style: GoogleFonts.almendra(
+                        color: const Color(0xFFFF6666),
+                        fontSize: 14,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Room Rental
+                  _rentLineItem('🏠 Room Rental', rent, country),
+
+                  // Overdue BNPL debts
+                  if (overduePlans.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      '⚠️ OUTSTANDING DEBTS',
+                      style: GoogleFonts.cinzel(
+                        color: Colors.orange.shade400,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...overduePlans.map((plan) => _rentLineItem(
+                      '📦 ${plan.itemName}',
+                      plan.monthlyAmount + plan.lateFees,
+                      country,
+                    )),
+                  ],
+
+                  const Divider(color: Colors.red, height: 32),
+
+                  // Total
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'TOTAL DUE',
+                        style: GoogleFonts.cinzel(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        CurrencyUtil.format(totalDue, country),
+                        style: GoogleFonts.cinzel(
+                          color: const Color(0xFFFF4444),
+                          fontWeight: FontWeight.w900,
+                          fontSize: 20,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Balance info
+                  Text(
+                    'Your balance: ${CurrencyUtil.format(totalBalance, country)}',
+                    style: GoogleFonts.almendra(
+                      color: canPay ? Colors.green.shade400 : Colors.red.shade400,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  if (!canPay) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.shade700, width: 2),
+                      ),
+                      child: Text(
+                        '💀 YOU CANNOT AFFORD THIS.\nYour farm will be seized.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.cinzel(
+                          color: Colors.red.shade300,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (canPay) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF228B22),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          _showingRentDialog = false;
+                          final success = await state.payRent();
+                          if (success && mounted) {
+                            DialogPopup.show(
+                              context,
+                              title: '✅ Rent Paid',
+                              message: 'You paid ${CurrencyUtil.format(totalDue, country)}. Next rent in 3 months — it will cost more.',
+                              icon: Icons.check_circle,
+                              iconColor: Colors.green,
+                            );
+                          }
+                        },
+                        child: Text(
+                          'PAY ${CurrencyUtil.format(totalDue, country)}',
+                          style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, fontSize: 16),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade900,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showingRentDialog = false;
+                        state.isGameOver = true;
+                        state.pendingRentCollection = false;
+                        state.refresh();
+                      },
+                      child: Text(
+                        '💀 GIVE UP',
+                        style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, fontSize: 16),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    });
+  }
+
+  Widget _rentLineItem(String label, double amount, String country) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Flexible(
+            child: Text(
+              label,
+              style: GoogleFonts.almendra(color: Colors.grey.shade300, fontSize: 14, fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            CurrencyUtil.format(amount, country),
+            style: GoogleFonts.cinzel(color: const Color(0xFFFF8888), fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _scheduleGameOverDialog(GameState state) {
+    if (_showingGameOver || !state.isGameOver || !mounted) return;
+
+    _showingGameOver = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        _showingGameOver = false;
+        return;
+      }
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            backgroundColor: const Color(0xFF0A0000),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: const BorderSide(color: Color(0xFF8B0000), width: 4),
+            ),
+            title: Text(
+              '💀 GAME OVER',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.cinzel(
+                color: Colors.red.shade400,
+                fontWeight: FontWeight.w900,
+                fontSize: 28,
+              ),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.dangerous, color: Colors.red.shade700, size: 80),
+                const SizedBox(height: 16),
+                Text(
+                  'The Shady Lender has seized your farm.\nYou couldn\'t pay your debts.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.almendra(
+                    color: Colors.grey.shade400,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '"Should have managed your money better, farmer..."',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.almendra(
+                    color: Colors.red.shade300,
+                    fontSize: 14,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.shade900,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _showingGameOver = false;
+                    state.isGameOver = false;
+                    state.devResetGame();
+                  },
+                  child: Text(
+                    'START OVER',
+                    style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, fontSize: 16),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
     });
   }
 

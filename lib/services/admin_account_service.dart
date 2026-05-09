@@ -24,11 +24,7 @@ class AdminAccountService {
     player.creditScore = kMaxCreditScore;
     player.tutorialCompleted = true;
 
-    if (player.cashBalance < kAdminUnlimitedBalance) {
-      player.cashBalance = kAdminUnlimitedBalance;
-    }
-    if (player.bankBalance < kAdminUnlimitedBalance) {
-      player.bankBalance = kAdminUnlimitedBalance;
-    }
+    // Balance is no longer automatically refilled here so admin can test
+    // scenarios where they run out of money. Use devAddMoney to add funds.
   }
 }

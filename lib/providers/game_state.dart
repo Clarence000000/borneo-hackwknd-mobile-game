@@ -338,6 +338,131 @@ class GameState extends ChangeNotifier {
   bool get autoHarvestEnabled => player?.autoHarvestEnabled ?? false;
   int get fertilizerPackCount => player?.fertilizerPackCount ?? 0;
 
+  // ── Shady Lender Room Rental ────────────────────────────────
+  bool pendingRentCollection = false;
+  bool isGameOver = false;
+
+  /// The absolute month index (0-based) since the start of the game.
+  int get absoluteMonth => (currentDay - 1) ~/ kGameDaysPerMonth;
+
+  int get overdueRentCount {
+    if (player == null) return 0;
+    final nextRentDueMonth = (player!.rentPaymentCount + 1) * 3;
+    if (absoluteMonth < nextRentDueMonth) return 0;
+    return ((absoluteMonth - nextRentDueMonth) ~/ 3) + 1;
+  }
+
+  /// Calculate the current rent amount (sums all overdue cycles)
+  double get currentRentAmount {
+    if (player == null) return 200.0;
+    int count = overdueRentCount;
+    if (count <= 0) count = 1;
+
+    double total = 0;
+    for (int i = 0; i < count; i++) {
+      total += 200.0 * _pow15(player!.rentPaymentCount + i);
+    }
+    return total;
+  }
+
+  double _pow15(int exponent) {
+    double result = 1.0;
+    for (int i = 0; i < exponent; i++) {
+      result *= 1.5;
+    }
+    return result;
+  }
+
+  /// Calculate total overdue BNPL debt (sums all missed installments + late fees)
+  double get totalOverdueBnplDebt {
+    double total = 0;
+    for (final plan in bnplPlans) {
+      if (plan.nextDueDay != null && plan.nextDueDay! <= currentDay) {
+        int missedInstallments = ((currentDay - plan.nextDueDay!) ~/ kGameDaysPerMonth) + 1;
+        total += (plan.monthlyAmount * missedInstallments) + plan.lateFees;
+      }
+    }
+    return total;
+  }
+
+  /// Check if rent is due (every 3 months from game start)
+  void _checkRentDue() {
+    if (player == null || isGameOver) return;
+    final month = absoluteMonth;
+    final nextRentDueMonth = (player!.rentPaymentCount + 1) * 3;
+    
+    if (month >= nextRentDueMonth) {
+      pendingRentCollection = true;
+      notifyListeners();
+    }
+  }
+
+  /// Get the number of days until the next rent is due
+  int get daysUntilNextRent {
+    if (player == null) return 90;
+    final nextRentDueMonth = (player!.rentPaymentCount + 1) * 3;
+    if (absoluteMonth >= nextRentDueMonth) {
+      return 0; // Rent is currently due
+    }
+    // We add 1 to kGameDaysPerMonth calculation because days are 1-indexed
+    int nextRentDay = (nextRentDueMonth * kGameDaysPerMonth) + 1;
+    return nextRentDay - currentDay;
+  }
+
+
+  /// Pay rent and resolve debts. Returns true if successful.
+  Future<bool> payRent() async {
+    if (player == null) return false;
+
+    final rent = currentRentAmount;
+    final overdue = totalOverdueBnplDebt;
+    final totalDue = rent + overdue;
+    final totalBalance = player!.cashBalance + player!.bankBalance;
+
+    // Mark as false early to prevent double-dialog triggers during async execution
+    pendingRentCollection = false;
+
+    if (totalBalance < totalDue) {
+      // Cannot pay — game over
+      isGameOver = true;
+      notifyListeners();
+      return false;
+    }
+
+    // Deduct from cash first, then bank
+    double remaining = totalDue;
+    if (player!.cashBalance >= remaining) {
+      player!.cashBalance -= remaining;
+    } else {
+      remaining -= player!.cashBalance;
+      player!.cashBalance = 0;
+      player!.bankBalance -= remaining;
+    }
+
+    // Pay off overdue BNPL plans
+    for (final plan in bnplPlans) {
+      if (plan.nextDueDay != null && plan.nextDueDay! <= currentDay) {
+        int missedInstallments = ((currentDay - plan.nextDueDay!) ~/ kGameDaysPerMonth) + 1;
+        plan.lateFees = 0;
+        plan.paidInstallments += missedInstallments;
+        plan.nextDueDay = plan.nextDueDay! + (missedInstallments * kGameDaysPerMonth);
+        if (plan.paidInstallments >= plan.installments) {
+          plan.status = BnplStatus.paid;
+        }
+        await _firestore.createBnplPlan(player!.uid, plan);
+      }
+    }
+
+    int count = overdueRentCount;
+    if (count <= 0) count = 1;
+    player!.rentPaymentCount += count;
+    player!.lastRentPaidMonth = absoluteMonth;
+
+    await _savePlayerState();
+    notifyListeners();
+    return true;
+  }
+
   bool _isCameraFollow = true;
   bool get isCameraFollow => _isCameraFollow;
 
@@ -987,6 +1112,10 @@ class GameState extends ChangeNotifier {
     player!.tractorOwned = false;
     player!.autoHarvestEnabled = false;
     player!.fertilizerPackCount = 0;
+    player!.rentPaymentCount = 0;
+    player!.lastRentPaidMonth = 0;
+    pendingRentCollection = false;
+    isGameOver = false;
     
     // 3. Clear Financial Items (Cloud subcollections should be cleared if possible, but locally we wipe)
     await _firestore.clearBnplPlans(uid);
@@ -1052,6 +1181,9 @@ class GameState extends ChangeNotifier {
     await _savePlayerState();
     await _saveGridState();
     game?.syncCropsFromGameState();
+    
+    // Check if skipping caused rent to become due
+    _checkRentDue();
     
     addNotification('Instantly skipped $days days!', icon: Icons.bolt, color: Colors.amber.shade900);
     notifyListeners();
@@ -1569,6 +1701,8 @@ class GameState extends ChangeNotifier {
           reportYear: previousYear,
           reportMonth: previousMonth,
         );
+        // Check if room rental is due (every 3 months)
+        _checkRentDue();
       }
 
       // Reset daily disaster states

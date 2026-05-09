@@ -204,6 +204,12 @@ class _HudOverlayState extends State<HudOverlay> {
                               label: 'Day: ${(state.currentDay - 1) % 30 + 1}',
                               color: Colors.brown.shade800,
                             ),
+                            const SizedBox(width: 8),
+                            _HudBadge(
+                              icon: Icons.access_time,
+                              label: 'Rent in ${state.daysUntilNextRent}d',
+                              color: Colors.red.shade900,
+                            ),
                             const SizedBox(width: 12),
                             _HudBadge(icon: Icons.monetization_on, label: CurrencyUtil.format(displayCash, displayCountry), color: Colors.orange.shade900),
                             const SizedBox(width: 8),

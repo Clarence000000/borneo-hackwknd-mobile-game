@@ -86,4 +86,4 @@ const double kManualNextDayCost = 10.0;
 
 // ─── Admin Test Account ───────────────────────────────────────
 const Set<String> kAdminTestEmails = {'admin@farmfintech.test'};
-const double kAdminUnlimitedBalance = 999999999.0;
+const double kAdminUnlimitedBalance = 1000.0;
