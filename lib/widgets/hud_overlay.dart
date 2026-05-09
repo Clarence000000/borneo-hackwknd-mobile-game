@@ -324,13 +324,10 @@ class _HudOverlayState extends State<HudOverlay> {
                               ),
                               _toolDivider(horizontal: true),
                               _ToolIcon(
-                                icon: Icons.person_pin_circle,
-                                label: 'Unstuck',
-                                color: Colors.red.shade900,
-                                onTap: () {
-                                  state.game?.respawnPlayer();
-                                  _showMessage('Hearthstone', 'The winds carry you back to the center of the realm.');
-                                },
+                                icon: Icons.auto_fix_high,
+                                label: 'Teleport',
+                                color: Colors.indigo.shade900,
+                                onTap: () => _showTeleportDialog(context, state),
                               ),
                               if (state.tractorOwned) ...[
                                 _toolDivider(horizontal: true),
@@ -397,6 +394,43 @@ class _HudOverlayState extends State<HudOverlay> {
   Widget _toolDivider({bool horizontal = false}) {
     if (horizontal) return Container(height: 2, width: 60, color: Colors.brown.withOpacity(0.2), margin: const EdgeInsets.symmetric(vertical: 8));
     return Container(width: 2, height: 30, color: Colors.brown.withOpacity(0.2), margin: const EdgeInsets.symmetric(horizontal: 12));
+  }
+
+  void _showTeleportDialog(BuildContext context, GameState state) {
+    const textColor = Color(0xFF2D1B10);
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFFF4E4BC),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: Color(0xFF5D4037), width: 4)),
+        title: Text('Teleportation', style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, color: textColor)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Where shall the winds carry you?', style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: textColor, fontSize: 16)),
+            const SizedBox(height: 16),
+            _teleportOption('City Hall', Icons.location_city, () => state.game?.teleport('city_hall')),
+            _teleportOption('My Home', Icons.home, () => state.game?.teleport('home')),
+            _teleportOption('Farmland', Icons.agriculture, () => state.game?.teleport('farmland')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: GoogleFonts.cinzel(color: Colors.grey.shade700, fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+  }
+
+  Widget _teleportOption(String label, IconData icon, VoidCallback onSelected) {
+    return ListTile(
+      leading: Icon(icon, color: const Color(0xFF5D4037)),
+      title: Text(label, style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10))),
+      onTap: () {
+        onSelected();
+        Navigator.pop(context);
+        _showMessage('Teleport', 'You have arrived at $label.');
+      },
+    );
   }
 
   void _showDisasterDialog(BuildContext context, GameState state) {

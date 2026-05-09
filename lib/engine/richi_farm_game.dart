@@ -399,6 +399,43 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     developer.log('Respawned player near map center.', name: 'RichiFarmGame');
   }
 
+  /// Teleports the player to a specific location.
+  void teleport(String location) {
+    if (isTransitioningMap) return;
+
+    switch (location) {
+      case 'city_hall':
+        if (currentMapName == 'cityhall.tmx') {
+          // Already in city hall, move to entrance
+          playerComponent?.position = Vector2(480, 560);
+          _setupCamera();
+        } else {
+          goToMap('cityhall.tmx', 'to_farm');
+        }
+        break;
+      case 'home':
+        if (currentMapName == 'level1.tmx') {
+          // Exactly at grid coordinate (21, 7)
+          playerComponent?.position = Vector2(344, 120);
+          _setupCamera();
+        } else {
+          // Go to level1 and spawn at the exact home coordinate
+          goToMap('level1.tmx', 'default', customPosition: Vector2(344, 120));
+        }
+        break;
+      case 'farmland':
+        if (currentMapName == 'level1.tmx') {
+          // Exactly at grid coordinate (19, 19) as shown in the screenshot
+          playerComponent?.position = Vector2(312, 312);
+          _setupCamera();
+        } else {
+          // Go to level1 and spawn at the exact farmland coordinate
+          goToMap('level1.tmx', 'default', customPosition: Vector2(312, 312));
+        }
+        break;
+    }
+  }
+
   bool isTransitioningMap = false;
   String currentMapName = 'level1.tmx';
   double _portalCooldown = 0.0;
@@ -407,7 +444,7 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
 
 
 
-  Future<void> goToMap(String mapName, String spawnPointName) async {
+  Future<void> goToMap(String mapName, String spawnPointName, {Vector2? customPosition}) async {
     if (isTransitioningMap) return;
     isTransitioningMap = true;
     currentMapName = mapName;
@@ -522,7 +559,9 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
         }
       }
 
-      if (spawnPointName == 'default' && playerComponent != null) {
+      if (customPosition != null && playerComponent != null) {
+         playerComponent!.position = customPosition;
+      } else if (spawnPointName == 'default' && playerComponent != null) {
          playerComponent!.position = Vector2((_mapWidth / 2) + 120, _mapHeight / 2);
       }
 
