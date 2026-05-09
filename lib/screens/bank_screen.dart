@@ -401,8 +401,8 @@ class _BankScreenState extends State<BankScreen> {
                   ? () async {
                       final selectedMonths = _loanMonths.toInt();
                       final monthlyPayment = _loanAmount * (1 + kLoanInterestRate) / selectedMonths;
-                      await FinancialAdvisor.warnLoan(context, player, monthlyPayment, 300);
-                      if (!context.mounted) return;
+                      final proceed = await FinancialAdvisor.warnLoan(context, player, monthlyPayment, 300);
+                      if (!proceed || !context.mounted) return;
                       final result = await CloudFunctionsService().evaluateLoan(_loanAmount, selectedMonths);
                       if (!context.mounted) return;
                       if (result['approved'] == true) {

@@ -13,6 +13,9 @@ import 'package:farm_fintech/screens/profile_screen.dart';
 import 'package:farm_fintech/screens/merchant_screen.dart';
 import 'package:farm_fintech/screens/leaderboard_screen.dart';
 import 'package:farm_fintech/utils/currency_util.dart';
+import 'package:farm_fintech/widgets/financial_advisor.dart';
+import 'package:farm_fintech/widgets/oracle_chat_dialog.dart';
+import 'package:farm_fintech/services/gemini_service.dart';
 
 /// Country flag emoji lookup
 const _countryFlags = {
@@ -365,6 +368,13 @@ class _HudOverlayState extends State<HudOverlay> {
                                   color: Colors.blueGrey.shade800,
                                   onTap: () => _showDevToolsDialog(context, state),
                                 ),
+                                _toolDivider(horizontal: true),
+                                _ToolIcon(
+                                  icon: Icons.psychology,
+                                  label: 'AI Test',
+                                  color: Colors.purple.shade800,
+                                  onTap: () => _showAiTestDialog(context, state),
+                                ),
                             ],
                           ),
                         ),
@@ -591,6 +601,179 @@ class _HudOverlayState extends State<HudOverlay> {
     );
   }
 
+  void _showAiTestDialog(BuildContext context, GameState state) {
+    const textColor = Color(0xFF2D1B10);
+    final player = state.player;
+    if (player == null) return;
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFFF4E4BC),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFF5D4037), width: 3),
+        ),
+        title: Row(
+          children: [
+            Image.asset(
+              'assets/images/character_14_frame32x32.png',
+              width: 32,
+              height: 32,
+              filterQuality: FilterQuality.none,
+              errorBuilder: (_, __, ___) => const Text('🧙', style: TextStyle(fontSize: 24)),
+            ),
+            const SizedBox(width: 10),
+            Text('AI Testing', style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, color: textColor)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Trigger any AI popup for debugging. Each calls Gemini in real-time.',
+                style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: textColor, fontSize: 14),
+              ),
+              const Divider(color: Color(0xFF5D4037)),
+              const SizedBox(height: 8),
+              _aiTestButton(
+                context,
+                icon: 'assets/images/character_14_frame32x32.png',
+                label: '🏦 Warn Loan',
+                subtitle: 'Lyra warns about risky loan',
+                onTap: () {
+                  Navigator.pop(context);
+                  FinancialAdvisor.forceWarnLoan(context, player);
+                },
+              ),
+              _aiTestButton(
+                context,
+                icon: 'assets/images/character_14_frame32x32.png',
+                label: '📦 Warn BNPL',
+                subtitle: 'Lyra warns about BNPL overuse',
+                onTap: () {
+                  Navigator.pop(context);
+                  FinancialAdvisor.forceWarnBnpl(context, player);
+                },
+              ),
+              _aiTestButton(
+                context,
+                icon: 'assets/images/character_14_frame32x32.png',
+                label: '🛡️ Suggest Insurance',
+                subtitle: 'Lyra suggests crop insurance',
+                onTap: () {
+                  Navigator.pop(context);
+                  FinancialAdvisor.forceSuggestInsurance(context, player);
+                },
+              ),
+              _aiTestButton(
+                context,
+                icon: 'assets/images/character_14_frame32x32.png',
+                label: '🔮 Danger Analysis',
+                subtitle: 'Full financial danger scan',
+                onTap: () {
+                  Navigator.pop(context);
+                  FinancialAdvisor.forceDangerAnalysis(
+                    context,
+                    player,
+                    bnplCount: state.bnplPlans.length,
+                    loanCount: state.loans.length,
+                    currentDay: state.currentDay,
+                    activeDisaster: state.activeDisaster.toString(),
+                  );
+                },
+              ),
+              _aiTestButton(
+                context,
+                icon: 'assets/images/character_14_frame32x32.png',
+                label: '💬 Oracle Chat',
+                subtitle: 'Open freeform chat with Lyra',
+                onTap: () {
+                  Navigator.pop(context);
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    barrierColor: Colors.black.withValues(alpha: 0.5),
+                    builder: (_) => OracleChatDialog(
+                      initialTrustScore: (player.creditScore / 850 * 100).toInt(),
+                      initialWarning: '',
+                      isDangerous: false,
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close', style: GoogleFonts.cinzel(color: const Color(0xFF5D4037), fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _aiTestButton(BuildContext context, {
+    required String icon,
+    required String label,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8D5B0).withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFD4C4A8)),
+            ),
+            child: Row(
+              children: [
+                Image.asset(
+                  icon,
+                  width: 28,
+                  height: 28,
+                  filterQuality: FilterQuality.none,
+                  errorBuilder: (_, __, ___) => const Text('🧙', style: TextStyle(fontSize: 20)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(label, style: GoogleFonts.cinzel(
+                        fontWeight: FontWeight.w900,
+                        color: const Color(0xFF2D1B10),
+                        fontSize: 13,
+                      )),
+                      Text(subtitle, style: GoogleFonts.almendra(
+                        color: const Color(0xFF5D4037),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      )),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: Color(0xFF5D4037), size: 20),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _confirmReset(BuildContext context, GameState state) {
     showDialog(
       context: context,
@@ -775,6 +958,143 @@ class _HudBadge extends StatelessWidget {
     );
   }
 }
+
+  void _showAiTestDialog(BuildContext context, GameState state) {
+    final player = state.player;
+    if (player == null) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFFF4E4BC), // Parchment
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFF5D4037), width: 3),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.psychology, color: Color(0xFF5D4037), size: 28),
+            const SizedBox(width: 8),
+            Text(
+              'AI TESTING',
+              style: GoogleFonts.cinzel(
+                color: const Color(0xFF5D4037),
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Trigger AI interactions manually:',
+              style: GoogleFonts.almendra(
+                color: const Color(0xFF5D4037),
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildAiTestButton(
+              context,
+              icon: Icons.money_off,
+              label: 'Warn: Bad Loan',
+              onTap: () {
+                Navigator.pop(ctx);
+                FinancialAdvisor.forceWarnLoan(context, player);
+              },
+            ),
+            _buildAiTestButton(
+              context,
+              icon: Icons.shopping_cart_checkout,
+              label: 'Warn: BNPL Overload',
+              onTap: () {
+                Navigator.pop(ctx);
+                FinancialAdvisor.forceWarnBnpl(context, player);
+              },
+            ),
+            _buildAiTestButton(
+              context,
+              icon: Icons.shield,
+              label: 'Suggest: Insurance',
+              onTap: () {
+                Navigator.pop(ctx);
+                FinancialAdvisor.forceSuggestInsurance(context, player);
+              },
+            ),
+            _buildAiTestButton(
+              context,
+              icon: Icons.warning,
+              label: 'Force Danger Analysis',
+              onTap: () {
+                Navigator.pop(ctx);
+                FinancialAdvisor.forceDangerAnalysis(
+                  context,
+                  player,
+                  bnplCount: 5,
+                  loanCount: 2,
+                  currentDay: state.currentDay,
+                  activeDisaster: state.activeDisaster.toString(),
+                );
+              },
+            ),
+            _buildAiTestButton(
+              context,
+              icon: Icons.chat,
+              label: 'Open Oracle Chat',
+              onTap: () {
+                Navigator.pop(ctx);
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  barrierColor: Colors.black.withValues(alpha: 0.5),
+                  builder: (_) => OracleChatDialog(
+                    initialTrustScore: 75,
+                    initialWarning: '',
+                    isDangerous: false,
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'CLOSE',
+              style: GoogleFonts.cinzel(
+                color: Colors.red.shade900,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiTestButton(BuildContext context, {required IconData icon, required String label, required VoidCallback onTap}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF5D4037),
+          foregroundColor: const Color(0xFFF4E4BC),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          alignment: Alignment.centerLeft,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        icon: Icon(icon, size: 20),
+        label: Text(label, style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, fontSize: 14)),
+        onPressed: onTap,
+      ),
+    );
+  }
 
 class _CreditScoreBadge extends StatelessWidget {
   final int score;

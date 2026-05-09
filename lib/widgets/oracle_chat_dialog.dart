@@ -5,19 +5,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:flame_audio/flame_audio.dart';
 
 import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/services/gemini_service.dart';
 
-/// Visual-novel style chat dialog for Lyra the Oracle.
-/// Opens as a modal bottom sheet with animated character portrait,
-/// chat bubbles, trust score bar, and a text input.
+/// Parchment-themed chat dialog for Lyra the Oracle.
+/// Opens as a modal bottom sheet with animated Lyra sprite portrait,
+/// chat bubbles on aged paper, trust score bar, and a text input.
 class OracleChatDialog extends StatefulWidget {
   final int initialTrustScore;
   final String initialWarning;
   final bool isDangerous;
   final bool isWarningMode;
+  final bool isReportMode;
   final String? warningButtonText;
 
   const OracleChatDialog({
@@ -26,6 +26,7 @@ class OracleChatDialog extends StatefulWidget {
     required this.initialWarning,
     required this.isDangerous,
     this.isWarningMode = false,
+    this.isReportMode = false,
     this.warningButtonText,
   });
 
@@ -35,14 +36,16 @@ class OracleChatDialog extends StatefulWidget {
 
 class _OracleChatDialogState extends State<OracleChatDialog>
     with TickerProviderStateMixin {
-  // ── Sprite ────────────────────────────────────────────────────
+  // ── Sprite & UI Assets ────────────────────────────────────────
   static const int _frameCount = 4;
   static const int _frameSize = 32;
   static const double _portraitScale = 2.0;
+  static const String _uiAssetPath = 'assets/images/letter UI/UI assets pack 2/UI books & more.png';
 
   int _currentFrame = 0;
   Timer? _animTimer;
   ui.Image? _spriteSheet;
+  ui.Image? _uiAsset;
 
   // ── Chat ──────────────────────────────────────────────────────
   final GeminiService _gemini = GeminiService();
@@ -56,6 +59,15 @@ class _OracleChatDialogState extends State<OracleChatDialog>
 
   // ── Typing animation ──────────────────────────────────────────
   late AnimationController _dotController;
+
+  // ── Parchment palette ─────────────────────────────────────────
+  static const Color _parchment = Color(0xFFFCF5E5);
+  static const Color _parchmentDark = Color(0xFFF4E4BC);
+  static const Color _ink = Color(0xFF3E2723);
+  static const Color _inkLight = Color(0xFF5D4037);
+  static const Color _gold = Color(0xFFC5A021);
+  static const Color _border = Color(0xFFD4C4A8);
+  static const Color _dangerRed = Color(0xFFB71C1C);
 
   @override
   void initState() {
@@ -85,7 +97,17 @@ class _OracleChatDialogState extends State<OracleChatDialog>
       final data = await rootBundle.load('assets/images/character_14_frame32x32.png');
       final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
       final frame = await codec.getNextFrame();
-      if (mounted) setState(() => _spriteSheet = frame.image);
+
+      final uiData = await rootBundle.load(_uiAssetPath);
+      final uiCodec = await ui.instantiateImageCodec(uiData.buffer.asUint8List());
+      final uiFrame = await uiCodec.getNextFrame();
+
+      if (mounted) {
+        setState(() {
+          _spriteSheet = frame.image;
+          _uiAsset = uiFrame.image;
+        });
+      }
     } catch (_) {}
   }
 
@@ -151,9 +173,9 @@ class _OracleChatDialogState extends State<OracleChatDialog>
 
   // ── Trust score color ─────────────────────────────────────────
   Color get _trustColor {
-    if (_trustScore >= 70) return const Color(0xFF4CAF50);
-    if (_trustScore >= 40) return const Color(0xFFFF9800);
-    return const Color(0xFFFF3D00);
+    if (_trustScore >= 70) return const Color(0xFF2E7D32);
+    if (_trustScore >= 40) return const Color(0xFFE65100);
+    return _dangerRed;
   }
 
   String get _trustLabel {
@@ -168,9 +190,17 @@ class _OracleChatDialogState extends State<OracleChatDialog>
 
     return Container(
       height: screenHeight * 0.78,
-      decoration: const BoxDecoration(
-        color: Color(0xFF0D0520),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: _parchment,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border.all(color: _border, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -181,7 +211,7 @@ class _OracleChatDialogState extends State<OracleChatDialog>
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: const Color(0xFF9B59B6).withValues(alpha: 0.5),
+                color: _inkLight.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -224,24 +254,22 @@ class _OracleChatDialogState extends State<OracleChatDialog>
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          // Portrait
+          // Portrait — Lyra sprite
           Container(
             width: _frameSize * _portraitScale + 8,
             height: _frameSize * _portraitScale + 8,
             decoration: BoxDecoration(
-              color: const Color(0xFF1A0D2E),
+              color: _parchmentDark,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: widget.isDangerous
-                    ? const Color(0xFFFF6B35)
-                    : const Color(0xFF9B59B6),
+                color: widget.isDangerous ? _dangerRed : _inkLight,
                 width: 2,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF9B59B6).withValues(alpha: 0.5),
-                  blurRadius: 12,
-                  spreadRadius: 2,
+                  color: _gold.withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  spreadRadius: 1,
                 ),
               ],
             ),
@@ -276,7 +304,7 @@ class _OracleChatDialogState extends State<OracleChatDialog>
                     Text(
                       '✨ Lyra the Oracle',
                       style: GoogleFonts.cinzel(
-                        color: const Color(0xFFE0C3FC),
+                        color: _ink,
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.5,
@@ -287,14 +315,14 @@ class _OracleChatDialogState extends State<OracleChatDialog>
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFF3D00).withValues(alpha: 0.2),
+                          color: _dangerRed.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFFFF3D00), width: 1),
+                          border: Border.all(color: _dangerRed, width: 1),
                         ),
                         child: Text(
                           '⚠ ALERT',
                           style: GoogleFonts.cinzel(
-                            color: const Color(0xFFFF6B35),
+                            color: _dangerRed,
                             fontSize: 9,
                             fontWeight: FontWeight.w900,
                           ),
@@ -310,7 +338,7 @@ class _OracleChatDialogState extends State<OracleChatDialog>
                     Text(
                       'Financial Aura: ',
                       style: GoogleFonts.almendra(
-                        color: const Color(0xFF9B59B6),
+                        color: _inkLight,
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
@@ -339,7 +367,7 @@ class _OracleChatDialogState extends State<OracleChatDialog>
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: _trustScore / 100,
-                    backgroundColor: const Color(0xFF2D1B4E),
+                    backgroundColor: _border,
                     valueColor: AlwaysStoppedAnimation<Color>(_trustColor),
                     minHeight: 6,
                   ),
@@ -351,7 +379,7 @@ class _OracleChatDialogState extends State<OracleChatDialog>
           // Close button
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.close, color: Color(0xFF9B59B6), size: 20),
+            icon: Icon(Icons.close, color: _inkLight, size: 20),
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             padding: EdgeInsets.zero,
           ),
@@ -364,7 +392,7 @@ class _OracleChatDialogState extends State<OracleChatDialog>
     return Row(
       children: [
         const SizedBox(width: 16),
-        const Icon(Icons.auto_awesome, size: 10, color: Color(0xFF9B59B6)),
+        Icon(Icons.auto_awesome, size: 10, color: _gold),
         Expanded(
           child: Container(
             height: 1,
@@ -372,15 +400,15 @@ class _OracleChatDialogState extends State<OracleChatDialog>
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  const Color(0xFF9B59B6).withValues(alpha: 0.1),
-                  const Color(0xFF9B59B6).withValues(alpha: 0.6),
-                  const Color(0xFF9B59B6).withValues(alpha: 0.1),
+                  _gold.withValues(alpha: 0.1),
+                  _gold.withValues(alpha: 0.6),
+                  _gold.withValues(alpha: 0.1),
                 ],
               ),
             ),
           ),
         ),
-        const Icon(Icons.auto_awesome, size: 10, color: Color(0xFF9B59B6)),
+        Icon(Icons.auto_awesome, size: 10, color: _gold),
         const SizedBox(width: 16),
       ],
     );
@@ -396,19 +424,30 @@ class _OracleChatDialogState extends State<OracleChatDialog>
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (isLyra) ...[
-            // Lyra avatar dot
+            // Lyra avatar — sprite
             Container(
-              width: 24,
-              height: 24,
+              width: 28,
+              height: 28,
               margin: const EdgeInsets.only(right: 8, bottom: 2),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF2D1B4E),
-                border: Border.all(color: const Color(0xFF9B59B6), width: 1.5),
+                color: _parchmentDark,
+                border: Border.all(color: _inkLight, width: 1.5),
               ),
-              child: const Center(
-                child: Text('✨', style: TextStyle(fontSize: 10)),
-              ),
+              child: _spriteSheet != null
+                  ? ClipOval(
+                      child: CustomPaint(
+                        size: const Size(24, 24),
+                        painter: _DialogSpritePainter(
+                          image: _spriteSheet!,
+                          frame: 0,
+                          row: 0,
+                          frameSize: _frameSize,
+                          displayScale: 24 / _frameSize,
+                        ),
+                      ),
+                    )
+                  : const Center(child: Text('✨', style: TextStyle(fontSize: 10))),
             ),
           ],
           Flexible(
@@ -418,9 +457,7 @@ class _OracleChatDialogState extends State<OracleChatDialog>
               ),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: isLyra
-                    ? const Color(0xFF1A0D2E)
-                    : const Color(0xFF0F3460),
+                color: isLyra ? _parchmentDark : const Color(0xFFE8D5B0),
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
@@ -429,24 +466,24 @@ class _OracleChatDialogState extends State<OracleChatDialog>
                 ),
                 border: Border.all(
                   color: isLyra
-                      ? const Color(0xFF9B59B6).withValues(alpha: 0.4)
-                      : const Color(0xFF3498DB).withValues(alpha: 0.4),
+                      ? _border
+                      : _gold.withValues(alpha: 0.5),
                   width: 1,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: (isLyra ? const Color(0xFF9B59B6) : const Color(0xFF3498DB))
-                        .withValues(alpha: 0.1),
-                    blurRadius: 8,
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
               child: Text(
                 content,
                 style: GoogleFonts.almendra(
-                  color: isLyra ? const Color(0xFFE0C3FC) : const Color(0xFFBDD6F5),
+                  color: isLyra ? _ink : _inkLight,
                   fontSize: 13,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                   height: 1.5,
                 ),
               ),
@@ -454,16 +491,16 @@ class _OracleChatDialogState extends State<OracleChatDialog>
           ),
           if (!isLyra) ...[
             Container(
-              width: 24,
-              height: 24,
+              width: 28,
+              height: 28,
               margin: const EdgeInsets.only(left: 8, bottom: 2),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF0F3460),
-                border: Border.all(color: const Color(0xFF3498DB), width: 1.5),
+                color: _parchmentDark,
+                border: Border.all(color: _gold, width: 1.5),
               ),
               child: const Center(
-                child: Text('🌾', style: TextStyle(fontSize: 10)),
+                child: Text('🌾', style: TextStyle(fontSize: 12)),
               ),
             ),
           ],
@@ -478,30 +515,40 @@ class _OracleChatDialogState extends State<OracleChatDialog>
       child: Row(
         children: [
           Container(
-            width: 24,
-            height: 24,
+            width: 28,
+            height: 28,
             margin: const EdgeInsets.only(right: 8, bottom: 2),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFF2D1B4E),
-              border: Border.all(color: const Color(0xFF9B59B6), width: 1.5),
+              color: _parchmentDark,
+              border: Border.all(color: _inkLight, width: 1.5),
             ),
-            child: const Center(child: Text('✨', style: TextStyle(fontSize: 10))),
+            child: _spriteSheet != null
+                ? ClipOval(
+                    child: CustomPaint(
+                      size: const Size(24, 24),
+                      painter: _DialogSpritePainter(
+                        image: _spriteSheet!,
+                        frame: _currentFrame,
+                        row: 0,
+                        frameSize: _frameSize,
+                        displayScale: 24 / _frameSize,
+                      ),
+                    ),
+                  )
+                : const Center(child: Text('✨', style: TextStyle(fontSize: 10))),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A0D2E),
+              color: _parchmentDark,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
                 bottomRight: Radius.circular(16),
                 bottomLeft: Radius.circular(4),
               ),
-              border: Border.all(
-                color: const Color(0xFF9B59B6).withValues(alpha: 0.4),
-                width: 1,
-              ),
+              border: Border.all(color: _border, width: 1),
             ),
             child: AnimatedBuilder(
               animation: _dotController,
@@ -518,7 +565,7 @@ class _OracleChatDialogState extends State<OracleChatDialog>
                       height: 7,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: const Color(0xFF9B59B6).withValues(alpha: opacity.clamp(0.2, 1.0)),
+                        color: _inkLight.withValues(alpha: opacity.clamp(0.2, 1.0)),
                       ),
                     );
                   }),
@@ -540,31 +587,72 @@ class _OracleChatDialogState extends State<OracleChatDialog>
           top: 12,
           bottom: MediaQuery.of(context).padding.bottom + 20,
         ),
-        decoration: const BoxDecoration(
-          color: Color(0xFF0D0520),
+        decoration: const BoxDecoration(color: _parchment),
+        child: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _inkLight,
+                  side: const BorderSide(color: _inkLight, width: 1.5),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(
+                  'I will think again',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.cinzel(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _dangerRed,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 2,
+                ),
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(
+                  'I will take the risk',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.cinzel(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
         ),
+      );
+    }
+
+    if (widget.isReportMode) {
+      return Container(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 12,
+          bottom: MediaQuery.of(context).padding.bottom + 20,
+        ),
+        decoration: const BoxDecoration(color: _parchment),
         child: SizedBox(
           width: double.infinity,
-          height: 54,
           child: ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF8E44AD),
+              backgroundColor: _inkLight,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: const BorderSide(color: Color(0xFFE0C3FC), width: 1.5),
-              ),
-              elevation: 8,
-              shadowColor: const Color(0xFF9B59B6).withValues(alpha: 0.6),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 2,
             ),
             onPressed: () => Navigator.pop(context),
             child: Text(
-              widget.warningButtonText ?? 'I UNDERSTAND',
-              style: GoogleFonts.cinzel(
-                fontSize: 16,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1.5,
-              ),
+              'I UNDERSTAND',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.cinzel(fontSize: 14, fontWeight: FontWeight.bold),
             ),
           ),
         ),
@@ -578,33 +666,28 @@ class _OracleChatDialogState extends State<OracleChatDialog>
         top: 12,
         bottom: MediaQuery.of(context).viewInsets.bottom + 16,
       ),
-      decoration: const BoxDecoration(
-        color: Color(0xFF0D0520),
-      ),
+      decoration: const BoxDecoration(color: _parchment),
       child: Row(
         children: [
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: const Color(0xFF1A0D2E),
+                color: Colors.white.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: const Color(0xFF9B59B6).withValues(alpha: 0.5),
-                  width: 1.5,
-                ),
+                border: Border.all(color: _border, width: 1.5),
               ),
               child: TextField(
                 controller: _inputController,
                 enabled: !_isLoading,
-                style: GoogleFonts.almendra(
-                  color: const Color(0xFFE0C3FC),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+                style: GoogleFonts.indieFlower(
+                  color: _ink,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
                 ),
                 decoration: InputDecoration(
                   hintText: 'Ask the Oracle...',
                   hintStyle: GoogleFonts.almendra(
-                    color: const Color(0xFF9B59B6).withValues(alpha: 0.5),
+                    color: _inkLight.withValues(alpha: 0.5),
                     fontSize: 13,
                   ),
                   border: InputBorder.none,
@@ -630,14 +713,14 @@ class _OracleChatDialogState extends State<OracleChatDialog>
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: _isLoading
-                      ? [const Color(0xFF2D1B4E), const Color(0xFF2D1B4E)]
-                      : [const Color(0xFF8E44AD), const Color(0xFF6C3483)],
+                      ? [_border, _border]
+                      : [_gold, const Color(0xFFA58415)],
                 ),
                 boxShadow: _isLoading
                     ? []
                     : [
                         BoxShadow(
-                          color: const Color(0xFF9B59B6).withValues(alpha: 0.6),
+                          color: _gold.withValues(alpha: 0.5),
                           blurRadius: 10,
                           spreadRadius: 1,
                         ),
@@ -645,9 +728,7 @@ class _OracleChatDialogState extends State<OracleChatDialog>
               ),
               child: Icon(
                 _isLoading ? Icons.hourglass_empty : Icons.send,
-                color: _isLoading
-                    ? const Color(0xFF9B59B6).withValues(alpha: 0.5)
-                    : Colors.white,
+                color: _isLoading ? _inkLight.withValues(alpha: 0.5) : Colors.white,
                 size: 20,
               ),
             ),
@@ -689,4 +770,20 @@ class _DialogSpritePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _DialogSpritePainter old) =>
       old.frame != frame || old.row != row;
+}
+
+/// Paints the lined paper from the "Paper tiles" section of the asset.
+class _LetterPaperPainter extends CustomPainter {
+  final ui.Image image;
+  const _LetterPaperPainter({required this.image});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final src = Rect.fromLTWH(544, 32, 64, 64); 
+    final dst = Rect.fromLTWH(0, 0, size.width, size.height);
+    canvas.drawImageRect(image, src, dst, Paint()..filterQuality = FilterQuality.medium);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
