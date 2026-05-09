@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:farm_fintech/config/constants.dart';
 import 'package:farm_fintech/config/theme.dart';
-import 'package:farm_fintech/engine/components/building_component.dart';
+import 'package:farm_fintech/engine/components/interactive_building_component.dart';
 import 'package:farm_fintech/engine/richi_farm_game.dart';
 import 'package:farm_fintech/models/tile.dart';
 import 'package:farm_fintech/providers/game_state.dart';
@@ -62,28 +62,31 @@ class _GameScreenState extends State<GameScreen> {
     state.game = _game; // Wire up so GameState can sync crop sprites
 
     // Navigate to the appropriate screen when the player taps a building.
-    _game.onBuildingTapped = (BuildingType type) {
+    _game.onBuildingTapped = (String type) {
       if (!mounted) return;
       switch (type) {
-        case BuildingType.house:
+        case 'house':
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const HouseScreen()),
           );
-        case BuildingType.bank:
+          break;
+        case 'bank':
           showGeneralDialog(
             context: context,
             barrierDismissible: true,
             barrierLabel: '',
             pageBuilder: (dialogCtx, anim1, anim2) => const BankScreen(),
           );
-        case BuildingType.merchant:
+          break;
+        case 'merchant':
           showGeneralDialog(
             context: context,
             barrierDismissible: true,
             barrierLabel: '',
             pageBuilder: (dialogCtx, anim1, anim2) => const MerchantScreen(),
           );
+          break;
       }
     };
 
