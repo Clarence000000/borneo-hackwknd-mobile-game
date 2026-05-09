@@ -1,13 +1,12 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { initializeApp, getApps } from "firebase-admin/app";
-import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
 if (!getApps().length) initializeApp();
 const db = getFirestore();
 
 const LATE_FEE_PERCENT = 0.5; // 50% of monthly installment
 const GAME_DAYS_PER_MONTH = 30;
-const DAY_MS = 24 * 60 * 60 * 1000;
 const ADMIN_TEST_EMAILS = new Set(["admin@farmfintech.test"]);
 
 type PaymentMethod = "cash" | "bank" | "auto";
@@ -29,12 +28,21 @@ function readMonthlyAmount(plan: any): number {
     return installments > 0 ? totalAmount / installments : 0;
 }
 
-function readNextDueDateMillis(plan: any): number {
-    return (plan.nextDueDate?.toMillis?.() || plan.nextDueDate || Date.now()) as number;
+function readStartDay(plan: any): number | null {
+    if (typeof plan.startDay === "number") return plan.startDay;
+    // Legacy reconstruction: nextDueDay was the due day of installment (paid+1).
+    // dueDayOf(paid+1) = startDay + paid*30  →  startDay = nextDueDay - paid*30
+    if (typeof plan.nextDueDay === "number") {
+        const paid = readPaidInstallments(plan);
+        return plan.nextDueDay - paid * GAME_DAYS_PER_MONTH;
+    }
+    return null;
 }
 
-function readNextDueDay(plan: any): number | null {
-    return typeof plan.nextDueDay === "number" ? plan.nextDueDay : null;
+function readMonthlyFines(plan: any): Record<string, number> {
+    const m = plan.monthlyFines;
+    if (m && typeof m === "object") return m as Record<string, number>;
+    return {};
 }
 
 function isAdminUser(userData: any, email?: string): boolean {
@@ -68,15 +76,14 @@ async function applyInstallmentPayment(
     isAdmin: boolean,
 ) {
     const installments = readInstallments(plan);
-    const paidInstallments = readPaidInstallments(plan);
-    const monthlyAmount = readMonthlyAmount(plan);
-    const lateFees = (plan.lateFees ?? 0) as number;
-    const amountDue = monthlyAmount + lateFees;
+    const paid = readPaidInstallments(plan);
+    const monthly = readMonthlyAmount(plan);
+    const fines = readMonthlyFines(plan);
 
-    if (installments <= 0 || monthlyAmount <= 0) {
+    if (installments <= 0 || monthly <= 0) {
         throw new HttpsError("failed-precondition", "Invalid BNPL plan configuration");
     }
-    if (paidInstallments >= installments) {
+    if (paid >= installments) {
         await planRef.update({status: "paid"});
         return {
             paidInstallment: false,
@@ -84,6 +91,10 @@ async function applyInstallmentPayment(
             message: "This BNPL plan is already fully paid.",
         };
     }
+
+    const nextIdx = paid + 1;
+    const fineForNext = Number(fines[String(nextIdx)] ?? 0);
+    const amountDue = monthly + fineForNext;
 
     const userRef = db.collection("users").doc(uid);
     const userDoc = await userRef.get();
@@ -109,21 +120,19 @@ async function applyInstallmentPayment(
         });
     }
 
-    const nextPaidInstallments = paidInstallments + 1;
-    const isFullyPaid = nextPaidInstallments >= installments;
-    const dueDateMillis = readNextDueDateMillis(plan);
-    const nextDueDay = readNextDueDay(plan);
-    const nextDueDate = new Date(Math.max(Date.now(), dueDateMillis) + GAME_DAYS_PER_MONTH * DAY_MS);
+    const nextPaid = paid + 1;
+    const isFullyPaid = nextPaid >= installments;
 
-    await planRef.update({
-        paidInstallments: nextPaidInstallments,
-        paidMonths: nextPaidInstallments,
-        remainingAmount: Math.max(0, (installments - nextPaidInstallments) * monthlyAmount),
-        lateFees: 0,
-        nextDueDate: Timestamp.fromDate(nextDueDate),
-        nextDueDay: nextDueDay != null ? nextDueDay + GAME_DAYS_PER_MONTH : null,
+    const update: Record<string, any> = {
+        paidInstallments: nextPaid,
+        paidMonths: nextPaid,
+        remainingAmount: Math.max(0, (installments - nextPaid) * monthly),
         status: isFullyPaid ? "paid" : "active",
-    });
+    };
+    if (fineForNext > 0) {
+        update[`monthlyFines.${nextIdx}`] = FieldValue.delete();
+    }
+    await planRef.update(update);
 
     await userRef.collection("transactions").add({
         amount: amountDue,
@@ -136,21 +145,28 @@ async function applyInstallmentPayment(
         paidInstallment: true,
         deductedFrom: wallet,
         amountPaid: amountDue,
-        remainingInstallments: Math.max(0, installments - nextPaidInstallments),
+        fineApplied: fineForNext,
+        paidInstallmentIndex: nextIdx,
+        remainingInstallments: Math.max(0, installments - nextPaid),
         completed: isFullyPaid,
         message: isFullyPaid
             ? "BNPL plan fully paid. Great job!"
-            : `Installment paid from ${wallet}.`,
+            : `Installment ${nextIdx} paid from ${wallet}.`,
     };
 }
 
+/**
+ * Repay a single BNPL installment.
+ * Always pays the oldest unpaid installment (paidInstallments + 1), charging
+ * monthlyAmount + that month's fine (if any). Prepayment is allowed.
+ */
 export const repayBnplInstallment = onCall(
     async (request) => {
         const uid = request.auth?.uid;
         const email = request.auth?.token?.email as string | undefined;
         if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");
 
-        const {planId, paymentMethod, currentDay} = request.data;
+        const {planId, paymentMethod} = request.data;
         if (!planId) {
             throw new HttpsError("invalid-argument", "planId required");
         }
@@ -178,20 +194,6 @@ export const repayBnplInstallment = onCall(
             };
         }
 
-        // Allow early repayment. If they pay before the due day, we just advance the due day.
-        const dueGameDay = readNextDueDay(plan);
-
-        // Legacy fallback for plans without nextDueDay.
-        if (dueGameDay == null) {
-            const dueDate = readNextDueDateMillis(plan);
-            if (Date.now() < dueDate) {
-                return {
-                    paidInstallment: false,
-                    message: "Installment is not due yet.",
-                };
-            }
-        }
-
         const userRef = db.collection("users").doc(uid);
         const userDoc = await userRef.get();
         const userData = userDoc.data()!;
@@ -204,18 +206,20 @@ export const repayBnplInstallment = onCall(
 /**
  * BNPL Penalty Calculation
  *
- * Called when a BNPL installment is overdue.
- * Applies realistic penalty charges to teach the dangers of BNPL debt traps.
+ * Fine-only: for each unpaid installment whose due day is strictly past
+ * `currentDay` and that doesn't already have a fine, attach a one-time
+ * 50% fine to that installment via monthlyFines[k]. Idempotent.
+ *
+ * No wallet deduction, no auto-pay, no auto-default.
  */
 export const calculateBnplPenalty = onCall(
     async (request) => {
         const uid = request.auth?.uid;
-        const email = request.auth?.token?.email as string | undefined;
         if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");
 
         const { planId, currentDay } = request.data;
-        if (!planId) {
-            throw new HttpsError("invalid-argument", "planId required");
+        if (!planId || typeof currentDay !== "number") {
+            throw new HttpsError("invalid-argument", "planId and currentDay required");
         }
 
         const planRef = db
@@ -230,76 +234,40 @@ export const calculateBnplPenalty = onCall(
         }
 
         const plan = planDoc.data()!;
-        const userRef = db.collection("users").doc(uid);
-        const userDoc = await userRef.get();
-        const userData = userDoc.data()!;
-        const adminAccount = isAdminUser(userData, email);
-
-        const dueGameDay = readNextDueDay(plan);
-        if (typeof currentDay === "number" && dueGameDay != null) {
-            if (currentDay <= dueGameDay) {
-                return {
-                    penalty: 0,
-                    message: `Payment is not yet overdue (due on game day ${dueGameDay})`,
-                };
-            }
-        } else {
-            const now = Date.now();
-            const dueDate = readNextDueDateMillis(plan);
-
-            if (now <= dueDate) {
-                return { penalty: 0, message: "Payment is not yet overdue" };
-            }
+        if ((plan.status ?? "active") !== "active") {
+            return { penalty: 0, finesAdded: 0, message: "Plan not active." };
         }
 
-        // First try to collect normal installment (cash first then bank).
-        const payResult = await applyInstallmentPayment(uid, planRef, plan, "auto", adminAccount);
-        if (payResult.paidInstallment === true) {
-            return {
-                penalty: 0,
-                autoPaid: true,
-                ...payResult,
-                message: "Overdue installment recovered before penalty.",
-            };
+        const installments = readInstallments(plan);
+        const paid = readPaidInstallments(plan);
+        const monthly = readMonthlyAmount(plan);
+        const fines = readMonthlyFines(plan);
+        const startDay = readStartDay(plan);
+
+        if (startDay == null) {
+            return { penalty: 0, finesAdded: 0, message: "Plan missing startDay." };
         }
 
-        const monthlyAmount = readMonthlyAmount(plan);
-        const totalPenalty = monthlyAmount * LATE_FEE_PERCENT;
+        const fineAmount = monthly * LATE_FEE_PERCENT;
+        const update: Record<string, any> = {};
+        let newFines = 0;
 
-        // Apply penalty
-        await planRef.update({
-            lateFees: FieldValue.increment(totalPenalty),
-        });
-
-        // Deduct from player's wallet (cash first, then bank)
-        let deductedFrom = "cash";
-        if (userData.cashBalance >= totalPenalty) {
-            await userRef.update({
-                cashBalance: FieldValue.increment(-totalPenalty),
-            });
-        } else if (userData.bankBalance >= totalPenalty) {
-            await userRef.update({
-                bankBalance: FieldValue.increment(-totalPenalty),
-            });
-            deductedFrom = "bank";
-        } else {
-            // Can't pay → default the plan
-            await planRef.update({ status: "defaulted" });
-            return {
-                penalty: totalPenalty,
-                deductedFrom: "none",
-                defaulted: true,
-                message: `Payment defaulted! You owe RM${totalPenalty.toFixed(2)} (50% late fee). Insufficient funds.`,
-            };
+        for (let k = paid + 1; k <= installments; k++) {
+            const due = startDay + (k - 1) * GAME_DAYS_PER_MONTH;
+            if (currentDay <= due) break; // strict >; later k also not overdue
+            if (fines[String(k)] != null) continue;
+            update[`monthlyFines.${k}`] = fineAmount;
+            newFines++;
         }
+
+        if (newFines > 0) await planRef.update(update);
 
         return {
-            penalty: totalPenalty,
-            lateFee: totalPenalty,
-            daysOverdue: typeof currentDay === "number" && dueGameDay != null ? currentDay - dueGameDay : 0,
-            deductedFrom,
-            defaulted: false,
-            message: `Late payment penalty: 50% of RM${monthlyAmount.toFixed(2)} = RM${totalPenalty.toFixed(2)} deducted from ${deductedFrom}.`,
+            penalty: newFines * fineAmount,
+            finesAdded: newFines,
+            message: newFines === 0
+                ? "No new fines."
+                : `Added ${newFines} late fee(s) of RM${fineAmount.toFixed(2)} each.`,
         };
     }
 );
@@ -321,6 +289,7 @@ export const createBnplPlan = onCall(
         const paymentMethod = (data.paymentMethod as PaymentMethod) ?? "auto";
         const merchant = typeof data.merchant === "string" ? data.merchant : "merchant";
         const description = typeof data.description === "string" ? data.description : "BNPL purchase";
+        const startDay = typeof data.startDay === "number" ? data.startDay : 0;
 
         if (!(totalAmount > 0)) {
             throw new HttpsError("invalid-argument", "totalAmount required and must be > 0");
@@ -336,10 +305,6 @@ export const createBnplPlan = onCall(
             monthlyAmount = installments > 0 ? totalAmount / installments : totalAmount;
         }
 
-        const nextDueDate = new Date(Date.now() + GAME_DAYS_PER_MONTH * DAY_MS);
-        const startDay = typeof data.startDay === "number" ? data.startDay : null;
-        const nextDueDay = startDay != null ? startDay + GAME_DAYS_PER_MONTH : null;
-
         const plan: any = {
             itemName: description,
             totalAmount,
@@ -350,14 +315,13 @@ export const createBnplPlan = onCall(
             paidInstallments: 0,
             paidMonths: 0,
             remainingAmount: totalAmount,
-            lateFees: 0,
             status: "active",
             paymentMethod,
             merchant,
             description,
+            startDay,
+            monthlyFines: {},
             createdAt: FieldValue.serverTimestamp(),
-            nextDueDate: Timestamp.fromDate(nextDueDate),
-            nextDueDay,
         };
 
         const planRef = await db.collection("users").doc(uid).collection("bnplPlans").add(plan);

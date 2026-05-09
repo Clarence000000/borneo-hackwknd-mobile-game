@@ -223,9 +223,25 @@ class _BnplPlanCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const textColor = Color(0xFF2D1B10);
-    final isOverdue = plan.isOverdueAtGameDay(state.currentDay);
-    final isPaidThisMonth = plan.nextDueDay != null && plan.nextDueDay! > state.currentDay;
-    
+    final label = plan.statusLabelAtDay(state.currentDay);
+    final isOverdue = label.startsWith('Overdue');
+    final isDue = label == 'Due by this month';
+    final fineForNext = plan.fineFor(plan.nextUnpaidIndex);
+    final dueAmount = plan.oldestUnpaidAmount();
+
+    final IconData statusIcon;
+    final Color statusColor;
+    if (isOverdue) {
+      statusIcon = Icons.error_outline;
+      statusColor = Colors.red.shade900;
+    } else if (isDue) {
+      statusIcon = Icons.schedule;
+      statusColor = const Color(0xFFBF360C);
+    } else {
+      statusIcon = Icons.check_circle;
+      statusColor = Colors.green.shade900;
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -243,38 +259,48 @@ class _BnplPlanCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(plan.itemName, 
-                   style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, fontSize: 16, color: textColor)),
-              Text('${CurrencyUtil.format(plan.monthlyAmount, player.country)}/mo', 
+              Expanded(
+                child: Text(plan.itemName,
+                     style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, fontSize: 16, color: textColor)),
+              ),
+              Text('${CurrencyUtil.format(plan.monthlyAmount, player.country)}/mo',
                    style: GoogleFonts.almendra(fontWeight: FontWeight.w900, fontSize: 16, color: const Color(0xFFBF360C))),
             ],
           ),
           const SizedBox(height: 4),
           Row(
             children: [
-              Icon(
-                isPaidThisMonth ? Icons.check_circle : Icons.error_outline,
-                size: 14,
-                color: isPaidThisMonth ? Colors.green.shade900 : Colors.red.shade900,
-              ),
+              Icon(statusIcon, size: 14, color: statusColor),
               const SizedBox(width: 4),
-              Text(
-                isPaidThisMonth ? 'Monthly Progress: PAID' : 'Monthly Progress: DUE',
-                style: GoogleFonts.almendra(
-                  fontSize: 12, 
-                  fontWeight: FontWeight.bold, 
-                  color: isPaidThisMonth ? Colors.green.shade900 : Colors.red.shade900
+              Expanded(
+                child: Text(
+                  'Monthly Progress: $label',
+                  style: GoogleFonts.almendra(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: statusColor,
+                  ),
                 ),
               ),
-              if (!isPaidThisMonth)
-                Text(' (Due Day ${plan.nextDueDay})', style: GoogleFonts.almendra(fontSize: 12, color: textColor)),
             ],
           ),
+          if (fineForNext > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 2, left: 18),
+              child: Text(
+                '+ ${CurrencyUtil.format(fineForNext, player.country)} late fee',
+                style: GoogleFonts.almendra(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red.shade900,
+                ),
+              ),
+            ),
           const Divider(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('${plan.paidInstallments}/${plan.installments} installments paid', 
+              Text('${plan.paidInstallments}/${plan.installments} installments paid',
                    style: GoogleFonts.almendra(fontSize: 14, fontWeight: FontWeight.bold, color: textColor)),
               ElevatedButton(
                 onPressed: () => _confirmRepayment(context, textColor),
@@ -284,7 +310,10 @@ class _BnplPlanCard extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-                child: Text('Repay Cash', style: GoogleFonts.cinzel(fontSize: 12, fontWeight: FontWeight.bold)),
+                child: Text(
+                  'Repay ${CurrencyUtil.format(dueAmount, player.country)}',
+                  style: GoogleFonts.cinzel(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
@@ -294,10 +323,20 @@ class _BnplPlanCard extends StatelessWidget {
   }
 
   void _confirmRepayment(BuildContext context, Color textColor) {
-    if (player.cashBalance < plan.monthlyAmount) {
+    final dueAmount = plan.oldestUnpaidAmount();
+    if (player.cashBalance < dueAmount) {
       _showParchmentSnackBar(context, 'Insufficient cash for installment.');
       return;
     }
+    final fine = plan.fineFor(plan.nextUnpaidIndex);
+    final monthIdx = plan.nextUnpaidIndex;
+    final body = fine > 0
+        ? 'Pay ${CurrencyUtil.format(dueAmount, player.country)} '
+          '(${CurrencyUtil.format(plan.monthlyAmount, player.country)} '
+          '+ ${CurrencyUtil.format(fine, player.country)} late fee) '
+          'for ${plan.itemName} month $monthIdx of ${plan.installments}?'
+        : 'Pay ${CurrencyUtil.format(dueAmount, player.country)} for ${plan.itemName} '
+          'month $monthIdx of ${plan.installments}?';
 
     showDialog(
       context: context,
@@ -309,7 +348,7 @@ class _BnplPlanCard extends StatelessWidget {
         ),
         title: Text('Confirm Repayment', style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, color: textColor)),
         content: Text(
-          'Pay ${CurrencyUtil.format(plan.monthlyAmount, player.country)} for ${plan.itemName} installment?',
+          body,
           style: GoogleFonts.almendra(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
         ),
         actions: [
@@ -681,23 +720,6 @@ void _showEquipmentBnplDialog(BuildContext context, _Equipment equipment, GameSt
   );
 }
 
-
-BnplPlan __createBnplPlan(
-  String itemName,
-  double totalAmount,
-  int months,
-  int currentDay,
-) {
-  return BnplPlan(
-    id: DateTime.now().millisecondsSinceEpoch.toString(),
-    itemName: itemName,
-    totalAmount: totalAmount,
-    installments: months,
-    monthlyAmount: totalAmount / months,
-    nextDueDate: DateTime.now().add(const Duration(days: kGameDaysPerMonth)),
-    nextDueDay: currentDay + kGameDaysPerMonth,
-  );
-}
 
 class _SeedShopSection extends StatelessWidget {
   final Player player;

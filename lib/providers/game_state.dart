@@ -999,15 +999,15 @@ class GameState extends ChangeNotifier {
     }
     
     // 3. Bulk Financial Calculations (Late Fees)
-    // We apply a late fee for every 30-day block we are past the nextDueDay.
+    // For each unpaid installment whose due day is now strictly past, attach
+    // a one-time 50% fine. Idempotent: skip months that already have a fine.
     for (final plan in bnplPlans) {
-      if (plan.status == BnplStatus.active && plan.nextDueDay != null) {
-        if (currentDay > plan.nextDueDay!) {
-          final daysPast = currentDay - plan.nextDueDay!;
-          final monthsMissed = (daysPast / kGameDaysPerMonth).floor() + 1;
-          plan.lateFees += (plan.monthlyAmount * kBnplLateFeePercent) * monthsMissed;
-          // Note: We do NOT advance nextDueDay because the installment hasn't been paid.
-        }
+      if (plan.status != BnplStatus.active) continue;
+      final fineAmount = plan.monthlyAmount * kBnplLateFeePercent;
+      for (var k = plan.paidInstallments + 1; k <= plan.installments; k++) {
+        if (currentDay <= plan.dueDayOf(k)) break;
+        if (plan.monthlyFines.containsKey(k)) continue;
+        plan.monthlyFines[k] = fineAmount;
       }
     }
 
@@ -1239,10 +1239,9 @@ class GameState extends ChangeNotifier {
       itemName: itemName,
       totalAmount: finalTotal,
       installments: installments,
-      paidInstallments: 1, // Start with 1st installment paid
+      paidInstallments: 1, // down-payment is installment 1
       monthlyAmount: monthlyAmount,
-      nextDueDate: DateTime.now().add(const Duration(days: kGameDaysPerMonth)),
-      nextDueDay: currentDay + kGameDaysPerMonth,
+      startDay: currentDay,
     );
 
     try {
@@ -1446,7 +1445,6 @@ class GameState extends ChangeNotifier {
 
       // Fire-and-forget server checks
       if (player != null) {
-        var needsRefresh = false;
         var disasterTriggeredToday = false;
 
         // 1. Weather Check
@@ -1486,37 +1484,18 @@ class GameState extends ChangeNotifier {
           clearDisaster();
         }
 
-        // 2. BNPL Auto-payment / Penalty check
+        // 2. BNPL Penalty check — attaches a one-time 50% fine to each
+        //    newly-overdue installment. No wallet deduction.
         for (final plan in bnplPlans) {
-          if (plan.status == BnplStatus.active) {
-            final result = await _cloud.calculateBnplPenalty(
-              plan.id,
-              currentDay,
-            );
-            // If a penalty was applied or defaulted, it modified the user wallet in Firestore
-            if ((result['penalty'] != null && result['penalty'] > 0) ||
-                (result['autoPaid'] == true) ||
-                (result['paidInstallment'] == true)) {
-              if (result['penalty'] != null && result['penalty'] > 0) {
-                _addMonthlyExpense(
-                  'interest',
-                  (result['penalty'] as num).toDouble(),
-                );
-              }
-              needsRefresh = true;
-            }
-          }
-        }
-
-        // If the server altered our wallet, fetch fresh state
-        if (needsRefresh) {
-          final updatedUser = await _firestore.getPlayer(
-            player!.uid,
-            forceRefresh: true,
+          if (plan.status != BnplStatus.active) continue;
+          final result = await _cloud.calculateBnplPenalty(
+            plan.id,
+            currentDay,
           );
-          if (updatedUser != null) {
-            player = updatedUser;
-            notifyListeners();
+          final penalty = (result['penalty'] as num?)?.toDouble() ?? 0;
+          final added = (result['finesAdded'] as num?)?.toInt() ?? 0;
+          if (added > 0 && penalty > 0) {
+            _addMonthlyExpense('interest', penalty);
           }
         }
 
@@ -1613,11 +1592,12 @@ class GameState extends ChangeNotifier {
       final index = bnplPlans.indexWhere((p) => p.id == planId);
       if (index >= 0) {
         final plan = bnplPlans[index];
-        plan.paidInstallments = (plan.paidInstallments + 1).clamp(0, plan.installments);
-        plan.lateFees = 0;
-        plan.nextDueDay = (plan.nextDueDay ?? currentDay) + kGameDaysPerMonth;
+        plan.monthlyFines.remove(plan.nextUnpaidIndex);
+        plan.paidInstallments =
+            (plan.paidInstallments + 1).clamp(0, plan.installments);
         if (plan.paidInstallments >= plan.installments) {
           plan.status = BnplStatus.paid;
+          bnplPlans.removeAt(index);
         }
       }
 
@@ -1628,6 +1608,7 @@ class GameState extends ChangeNotifier {
       }
       addNotification('Installment paid successfully!', icon: Icons.check_circle, color: Colors.green);
       notifyListeners();
+      return result;
     }
 
     if (result['paidInstallment'] != true && player!.isAdmin == true) {
@@ -1647,26 +1628,24 @@ class GameState extends ChangeNotifier {
         };
       }
 
-      plan.paidInstallments = (plan.paidInstallments + 1).clamp(0, plan.installments);
-      plan.lateFees = 0;
-      plan.nextDueDay = (plan.nextDueDay ?? currentDay) + kGameDaysPerMonth;
-      plan.nextDueDate = DateTime.now().add(
-        const Duration(days: kGameDaysPerMonth),
-      );
-
+      final amountDue = plan.oldestUnpaidAmount();
+      plan.monthlyFines.remove(plan.nextUnpaidIndex);
+      plan.paidInstallments =
+          (plan.paidInstallments + 1).clamp(0, plan.installments);
       if (plan.paidInstallments >= plan.installments) {
         plan.status = BnplStatus.paid;
+        bnplPlans.removeAt(index);
       }
-      
+
       // Admin Fallback: Manually deduct cash if requested
       if (method == PaymentMethod.cash) {
-        player!.cashBalance -= plan.monthlyAmount;
+        player!.cashBalance -= amountDue;
         await _firestore.savePlayer(player!);
       }
-      
+
       // IMPORTANT: Save the locally modified plan back to Firestore, otherwise the stream overwrites it.
       await _firestore.createBnplPlan(player!.uid, plan);
-      
+
       addNotification('Admin Bypass: Payment processed locally.', icon: Icons.admin_panel_settings, color: Colors.blue);
       notifyListeners();
       return {
@@ -1675,32 +1654,6 @@ class GameState extends ChangeNotifier {
         'adminBypass': true,
         'message': 'Admin test payment applied locally.',
       };
-    }
-
-    final updatedUser = await _firestore.getPlayer(
-      player!.uid,
-      forceRefresh: true,
-    );
-    if (updatedUser != null) {
-      player = updatedUser;
-    }
-
-    final index = bnplPlans.indexWhere((plan) => plan.id == planId);
-    if (index >= 0 && result['paidInstallment'] == true) {
-      final plan = bnplPlans[index];
-      plan.paidInstallments = (plan.paidInstallments + 1).clamp(
-        0,
-        plan.installments,
-      );
-      plan.lateFees = 0;
-      plan.nextDueDay = (plan.nextDueDay ?? currentDay) + kGameDaysPerMonth;
-      plan.nextDueDate = DateTime.now().add(
-        const Duration(days: kGameDaysPerMonth),
-      );
-      if (result['completed'] == true ||
-          plan.paidInstallments >= plan.installments) {
-        plan.status = BnplStatus.paid;
-      }
     }
 
     notifyListeners();

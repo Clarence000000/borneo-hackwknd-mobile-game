@@ -80,9 +80,9 @@ class FirestoreService {
           'paidMonths': plan.paidInstallments,
           'monthlyPayment': plan.monthlyAmount,
           'status': plan.status.name,
-          'nextDueDate': Timestamp.fromDate(plan.nextDueDate),
-          'nextDueDay': plan.nextDueDay,
-          'lateFees': plan.lateFees,
+          'startDay': plan.startDay,
+          'monthlyFines':
+              plan.monthlyFines.map((k, v) => MapEntry(k.toString(), v)),
           'createdAt': FieldValue.serverTimestamp(),
         });
   }
@@ -97,6 +97,7 @@ class FirestoreService {
           .snapshots()
           .map((snap) => snap.docs
               .map((d) => BnplPlan.fromMap(d.id, d.data()))
+              .where((plan) => plan.status == BnplStatus.active)
               .toList());
     }
 

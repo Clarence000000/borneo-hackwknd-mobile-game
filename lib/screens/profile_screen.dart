@@ -473,7 +473,7 @@ class _BnplTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const textColor = Color(0xFF2D1B10);
-    final isOverdue = plan.isOverdueAtGameDay(currentDay);
+    final isOverdue = plan.overdueCountAtDay(currentDay) > 0;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
