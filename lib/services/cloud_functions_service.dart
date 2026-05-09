@@ -1,4 +1,5 @@
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 String _readFunctionErrorMessage(Object e) {
@@ -11,12 +12,21 @@ String _readFunctionErrorMessage(Object e) {
 /// Generic Cloud Functions caller service.
 class CloudFunctionsService {
   final FirebaseFunctions _functions = FirebaseFunctions.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  Future<void> _ensureAuthenticated() async {
+    if (_auth.currentUser == null) {
+      debugPrint('No authenticated user found. Signing in anonymously...');
+      await _auth.signInAnonymously();
+    }
+  }
 
   /// Evaluate if the player qualifies for a loan based on their credit score
   Future<Map<String, dynamic>> evaluateLoan(
     double amount,
     int termMonths,
   ) async {
+    await _ensureAuthenticated();
     try {
       final callable = _functions.httpsCallable('evaluateLoan');
       final result = await callable.call({
@@ -35,6 +45,7 @@ class CloudFunctionsService {
     String planId,
     int currentDay,
   ) async {
+    await _ensureAuthenticated();
     try {
       final callable = _functions.httpsCallable('calculateBnplPenalty');
       final result = await callable.call({
@@ -58,6 +69,7 @@ class CloudFunctionsService {
     String paymentMethod,
     int currentDay,
   ) async {
+    await _ensureAuthenticated();
     try {
       final callable = _functions.httpsCallable('repayBnplInstallment');
       final result = await callable.call({
@@ -78,6 +90,7 @@ class CloudFunctionsService {
 
   /// Request the server to check the weather at the given coordinates
   Future<Map<String, dynamic>> checkWeather(double lat, double lng) async {
+    await _ensureAuthenticated();
     try {
       final callable = _functions.httpsCallable('weatherCheck');
       final result = await callable.call({'lat': lat, 'lng': lng});
@@ -90,6 +103,7 @@ class CloudFunctionsService {
 
   /// Recalculate credit score based on historical bank transactions
   Future<Map<String, dynamic>> calculateCreditScore() async {
+    await _ensureAuthenticated();
     try {
       final callable = _functions.httpsCallable('calculateCreditScore');
       final result = await callable.call();
