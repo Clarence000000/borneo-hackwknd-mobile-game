@@ -859,19 +859,31 @@ class GameState extends ChangeNotifier {
   // handleTap is now in RichiFarmGame.handleTap() — it calls selectTile().
 
   /// Buy seeds from merchant
-  Future<bool> buySeeds(CropType type, int quantity) async {
-    if (player == null) return false;
+  Future<bool> buySeeds(CropType type, int quantity, {bool useBnpl = false, int installments = 3}) async {
+    if (player == null || quantity <= 0) return false;
     final config = kCropConfig[type]!;
-    final cost = (config['seedCost'] as double) * quantity;
+    final basePrice = config['seedCost'] as double;
+    final totalPrice = basePrice * quantity;
 
-    if (player!.cashBalance + player!.bankBalance < cost) return false;
-
-    if (player!.cashBalance >= cost) {
-      player!.pay(cost, method: PaymentMethod.cash);
-    } else {
-      player!.pay(cost, method: PaymentMethod.bank);
+    if (useBnpl) {
+      return await purchaseWithBnpl(
+        '${config['name']} Seeds (x$quantity)',
+        totalPrice,
+        installments,
+        isSeed: true,
+        cropType: type,
+        quantity: quantity,
+      );
     }
-    _addMonthlyExpense('seed', cost);
+
+    if (player!.cashBalance + player!.bankBalance < totalPrice) return false;
+
+    if (player!.cashBalance >= totalPrice) {
+      player!.pay(totalPrice, method: PaymentMethod.cash);
+    } else {
+      player!.pay(totalPrice, method: PaymentMethod.bank);
+    }
+    _addMonthlyExpense('seed', totalPrice);
 
     final seedKey = '${type.name}_seed';
     final current = player!.inventory[seedKey] ?? 0;
@@ -906,6 +918,110 @@ class GameState extends ChangeNotifier {
     }
     await _saveGridState();
     game?.syncCropsFromGameState();
+    notifyListeners();
+  }
+
+  /// Developer Option: Remove Money
+  Future<void> devRemoveMoney(double amount) async {
+    if (player == null) return;
+    player!.cashBalance = (player!.cashBalance - amount).clamp(0, double.infinity);
+    await _savePlayerState();
+    notifyListeners();
+  }
+
+  /// Developer Option: Reset Game
+  Future<void> devResetGame() async {
+    if (player == null) return;
+    final uid = player!.uid;
+    
+    // 1. Reset Player Stats
+    player = Player(
+      uid: uid,
+      displayName: player!.displayName,
+      country: player!.country,
+      currency: player!.currency,
+      cashBalance: kStartingCash,
+      bankBalance: 0,
+      creditScore: kStartingCreditScore,
+      currentDay: 0,
+    );
+    currentDay = 0;
+    
+    // 2. Clear Inventory
+    player!.inventory.clear();
+    player!.tractorOwned = false;
+    player!.autoHarvestEnabled = false;
+    player!.fertilizerPackCount = 0;
+    
+    // 3. Clear Financial Items
+    await _firestore.clearBnplPlans(uid);
+    await _firestore.clearInsurancePolicies(uid);
+    await _firestore.clearBankAccounts(uid);
+    
+    // 4. Clear Grid
+    for (final row in grid) {
+      for (final tile in row) {
+        tile.crop = null;
+        tile.farmState = FarmPlotState.idle;
+        tile.growthStage = 0;
+      }
+    }
+    
+    await _savePlayerState();
+    await _saveGridState();
+    game?.syncCropsFromGameState();
+    
+    // 5. Reset UI
+    bnplPlans = [];
+    insurances = [];
+    
+    notifyListeners();
+  }
+
+  /// Developer Option: Skip Multiple Days (High Efficiency)
+  Future<void> devSkipDays(int days) async {
+    if (days <= 0 || player == null) return;
+    
+    // 1. Advance Game Time
+    currentDay += days;
+    player!.currentDay = currentDay;
+    
+    // 2. Bulk Grow All Crops
+    for (final row in grid) {
+      for (final tile in row) {
+        if (tile.hasCrop) {
+          // In a 30-day skip, all current crops will definitely reach maturity
+          tile.growthStage = 3;
+          tile.farmState = FarmPlotState.ready;
+          tile.readyDay ??= currentDay;
+        }
+      }
+    }
+    
+    // 3. Bulk Financial Calculations (Late Fees)
+    // We apply a late fee for every 30-day block we are past the nextDueDay.
+    for (final plan in bnplPlans) {
+      if (plan.status == BnplStatus.active && plan.nextDueDay != null) {
+        if (currentDay > plan.nextDueDay!) {
+          final daysPast = currentDay - plan.nextDueDay!;
+          final monthsMissed = (daysPast / kGameDaysPerMonth).floor() + 1;
+          plan.lateFees += (plan.monthlyAmount * kBnplLateFeePercent) * monthsMissed;
+          // Note: We do NOT advance nextDueDay because the installment hasn't been paid.
+        }
+      }
+    }
+
+    // 4. Bulk Insurance Expiration
+    if (player != null) {
+      player!.insurances.removeWhere((ins) => ins.isExpired(currentDay));
+    }
+
+    // 5. Persistence (Single Pass)
+    await _savePlayerState();
+    await _saveGridState();
+    game?.syncCropsFromGameState();
+    
+    addNotification('Instantly skipped $days days!', icon: Icons.bolt, color: Colors.amber.shade900);
     notifyListeners();
   }
 
@@ -1099,30 +1215,60 @@ class GameState extends ChangeNotifier {
   Future<bool> purchaseWithBnpl(
     String itemName,
     double totalAmount,
-    int installments,
-  ) async {
+    int installments, {
+    bool isSeed = false,
+    CropType? cropType,
+    int quantity = 0,
+  }) async {
     if (player == null) return false;
+
+    double finalTotal = totalAmount;
+    if (installments == 6) {
+      finalTotal = totalAmount * (1 + kBnpl6MonthFee);
+    }
+
+    final monthlyAmount = finalTotal / installments;
+    
+    // Check if player has enough for the first installment
+    if (player!.cashBalance + player!.bankBalance < monthlyAmount) {
+      return false; // Insufficient funds for first installment
+    }
 
     final plan = BnplPlan(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       itemName: itemName,
-      totalAmount: totalAmount,
+      totalAmount: finalTotal,
       installments: installments,
-      monthlyAmount: totalAmount / installments,
+      paidInstallments: 1, // Start with 1st installment paid
+      monthlyAmount: monthlyAmount,
       nextDueDate: DateTime.now().add(const Duration(days: kGameDaysPerMonth)),
       nextDueDay: currentDay + kGameDaysPerMonth,
     );
 
     try {
       // Write the BNPL plan to Firestore.
-      // The realtime stream listener will automatically pick it up
-      // and refresh bnplPlans in memory.
       await _firestore.createBnplPlan(player!.uid, plan);
 
-      // Unlock the equipment immediately (the player pays over time).
-      await unlockEquipment(itemName);
+      if (isSeed && cropType != null) {
+        final seedKey = '${cropType.name}_seed';
+        final current = player!.inventory[seedKey] ?? 0;
+        player!.inventory[seedKey] = current + quantity;
+      } else {
+        // Unlock the equipment immediately
+        await unlockEquipment(itemName);
+      }
 
-      _addMonthlyExpense('equipment', 0); // No upfront cost
+      // Deduct the first installment immediately
+      if (player!.cashBalance >= monthlyAmount) {
+        player!.cashBalance -= monthlyAmount;
+        await _firestore.logTransaction(player!.uid, amount: monthlyAmount, paymentType: 'cash', category: 'bnplDownPayment');
+      } else {
+        player!.bankBalance -= monthlyAmount;
+        await _firestore.logTransaction(player!.uid, amount: monthlyAmount, paymentType: 'bank', category: 'bnplDownPayment');
+      }
+      
+      await _firestore.savePlayer(player!);
+      _addMonthlyExpense('equipment', monthlyAmount);
 
       // Log a transaction for credit score tracking
       await _firestore.logTransaction(
@@ -1462,6 +1608,28 @@ class GameState extends ChangeNotifier {
       currentDay,
     );
 
+    if (result['paidInstallment'] == true) {
+      // 1. Manually update the local plan for immediate UI feedback
+      final index = bnplPlans.indexWhere((p) => p.id == planId);
+      if (index >= 0) {
+        final plan = bnplPlans[index];
+        plan.paidInstallments = (plan.paidInstallments + 1).clamp(0, plan.installments);
+        plan.lateFees = 0;
+        plan.nextDueDay = (plan.nextDueDay ?? currentDay) + kGameDaysPerMonth;
+        if (plan.paidInstallments >= plan.installments) {
+          plan.status = BnplStatus.paid;
+        }
+      }
+
+      // 2. Refresh player state to reflect new balance
+      final updated = await _firestore.getPlayer(player!.uid, forceRefresh: true);
+      if (updated != null) {
+        player = updated;
+      }
+      addNotification('Installment paid successfully!', icon: Icons.check_circle, color: Colors.green);
+      notifyListeners();
+    }
+
     if (result['paidInstallment'] != true && player!.isAdmin == true) {
       final index = bnplPlans.indexWhere((plan) => plan.id == planId);
       if (index < 0) {
@@ -1479,10 +1647,7 @@ class GameState extends ChangeNotifier {
         };
       }
 
-      plan.paidInstallments = (plan.paidInstallments + 1).clamp(
-        0,
-        plan.installments,
-      );
+      plan.paidInstallments = (plan.paidInstallments + 1).clamp(0, plan.installments);
       plan.lateFees = 0;
       plan.nextDueDay = (plan.nextDueDay ?? currentDay) + kGameDaysPerMonth;
       plan.nextDueDate = DateTime.now().add(
@@ -1492,7 +1657,17 @@ class GameState extends ChangeNotifier {
       if (plan.paidInstallments >= plan.installments) {
         plan.status = BnplStatus.paid;
       }
-
+      
+      // Admin Fallback: Manually deduct cash if requested
+      if (method == PaymentMethod.cash) {
+        player!.cashBalance -= plan.monthlyAmount;
+        await _firestore.savePlayer(player!);
+      }
+      
+      // IMPORTANT: Save the locally modified plan back to Firestore, otherwise the stream overwrites it.
+      await _firestore.createBnplPlan(player!.uid, plan);
+      
+      addNotification('Admin Bypass: Payment processed locally.', icon: Icons.admin_panel_settings, color: Colors.blue);
       notifyListeners();
       return {
         'paidInstallment': true,

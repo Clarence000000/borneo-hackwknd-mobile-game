@@ -183,4 +183,19 @@ class FirestoreService {
     }
     return grid;
   }
+
+  /// Delete all documents in a subcollection
+  Future<void> _clearSubcollection(String uid, String subcollection) async {
+    final ref = _db.collection('users').doc(uid).collection(subcollection);
+    final snapshot = await ref.get();
+    final batch = _db.batch();
+    for (final doc in snapshot.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
+  Future<void> clearBnplPlans(String uid) => _clearSubcollection(uid, 'bnplPlans');
+  Future<void> clearInsurancePolicies(String uid) => _clearSubcollection(uid, 'insurancePolicies');
+  Future<void> clearBankAccounts(String uid) => _clearSubcollection(uid, 'bankAccounts');
 }

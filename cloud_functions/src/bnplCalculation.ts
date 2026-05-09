@@ -5,9 +5,7 @@ import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 if (!getApps().length) initializeApp();
 const db = getFirestore();
 
-// Penalty config (realistic Malaysian BNPL fees)
-const ADMIN_FEE = 10; // RM10 admin fee per missed payment
-const LATE_FEE = 23; // RM23 late payment fee
+const LATE_FEE_PERCENT = 0.5; // 50% of monthly installment
 const GAME_DAYS_PER_MONTH = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ADMIN_TEST_EMAILS = new Set(["admin@farmfintech.test"]);
@@ -180,13 +178,8 @@ export const repayBnplInstallment = onCall(
             };
         }
 
+        // Allow early repayment. If they pay before the due day, we just advance the due day.
         const dueGameDay = readNextDueDay(plan);
-        if (typeof currentDay === "number" && dueGameDay != null && currentDay < dueGameDay) {
-            return {
-                paidInstallment: false,
-                message: `Installment is not due yet. Next due on game day ${dueGameDay}.`,
-            };
-        }
 
         // Legacy fallback for plans without nextDueDay.
         if (dueGameDay == null) {
@@ -270,12 +263,8 @@ export const calculateBnplPenalty = onCall(
             };
         }
 
-        // Calculate days overdue
-        const daysOverdue =
-            typeof currentDay === "number" && dueGameDay != null
-                ? currentDay - dueGameDay
-                : Math.floor((Date.now() - readNextDueDateMillis(plan)) / DAY_MS);
-        const totalPenalty = ADMIN_FEE + LATE_FEE;
+        const monthlyAmount = readMonthlyAmount(plan);
+        const totalPenalty = monthlyAmount * LATE_FEE_PERCENT;
 
         // Apply penalty
         await planRef.update({
@@ -300,18 +289,17 @@ export const calculateBnplPenalty = onCall(
                 penalty: totalPenalty,
                 deductedFrom: "none",
                 defaulted: true,
-                message: `Payment defaulted! You owe RM${totalPenalty} (RM${ADMIN_FEE} admin + RM${LATE_FEE} late fee). Insufficient funds.`,
+                message: `Payment defaulted! You owe RM${totalPenalty.toFixed(2)} (50% late fee). Insufficient funds.`,
             };
         }
 
         return {
             penalty: totalPenalty,
-            adminFee: ADMIN_FEE,
-            lateFee: LATE_FEE,
-            daysOverdue,
+            lateFee: totalPenalty,
+            daysOverdue: typeof currentDay === "number" && dueGameDay != null ? currentDay - dueGameDay : 0,
             deductedFrom,
             defaulted: false,
-            message: `Late payment penalty: RM${ADMIN_FEE} admin fee + RM${LATE_FEE} late fee = RM${totalPenalty} deducted from ${deductedFrom}.`,
+            message: `Late payment penalty: 50% of RM${monthlyAmount.toFixed(2)} = RM${totalPenalty.toFixed(2)} deducted from ${deductedFrom}.`,
         };
     }
 );

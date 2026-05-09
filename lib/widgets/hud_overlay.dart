@@ -193,6 +193,18 @@ class _HudOverlayState extends State<HudOverlay> {
                               ),
                             ),
                             const SizedBox(width: 12),
+                            _HudBadge(
+                              icon: Icons.calendar_month, 
+                              label: 'MONTH: ${(state.currentDay ~/ kGameDaysPerMonth) + 1}', 
+                              color: const Color(0xFF5D4037)
+                            ),
+                            const SizedBox(width: 8),
+                            _HudBadge(
+                              icon: Icons.today, 
+                              label: 'DAY: ${state.currentDay % kGameDaysPerMonth}', 
+                              color: const Color(0xFF5D4037)
+                            ),
+                            const SizedBox(width: 12),
                             _HudBadge(icon: Icons.monetization_on, label: CurrencyUtil.format(displayCash, displayCountry), color: Colors.orange.shade900),
                             const SizedBox(width: 8),
                             if (player.bankRegistered)
@@ -408,17 +420,127 @@ class _HudOverlayState extends State<HudOverlay> {
 
   void _showDevToolsDialog(BuildContext context, GameState state) {
     const textColor = Color(0xFF2D1B10);
+    int skipDays = 1;
+
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          backgroundColor: const Color(0xFFF4E4BC),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFF5D4037), width: 3)),
+          title: Text('Developer Tools', style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, color: textColor)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Realm administration options.', style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: textColor, fontSize: 16)),
+                const Divider(color: Color(0xFF5D4037)),
+                
+                // --- Skip Days Section ---
+                Text('Skip Game Days: $skipDays', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, color: textColor, fontSize: 14)),
+                Slider(
+                  value: skipDays.toDouble(),
+                  min: 1,
+                  max: 30,
+                  divisions: 29,
+                  activeColor: const Color(0xFF5D4037),
+                  inactiveColor: const Color(0xFF5D4037).withOpacity(0.2),
+                  onChanged: (val) => setState(() => skipDays = val.toInt()),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      state.devSkipDays(skipDays);
+                      Navigator.pop(ctx);
+                    },
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D4037), foregroundColor: const Color(0xFFF4E4BC)),
+                    child: Text('SKIP $skipDays DAYS', style: GoogleFonts.cinzel(fontWeight: FontWeight.w900)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // --- Balance Section ---
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => state.devAddMoney(1000),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade900, foregroundColor: const Color(0xFFF4E4BC)),
+                        child: Text('+1000 CASH', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => state.devRemoveMoney(1000),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade900, foregroundColor: const Color(0xFFF4E4BC)),
+                        child: Text('-1000 CASH', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => state.devRemoveAllPlants(),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.brown.shade700, foregroundColor: const Color(0xFFF4E4BC)),
+                    child: Text('CLEAR ALL CROPS', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // --- Reset Section ---
+                const Divider(color: Color(0xFF5D4037)),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => _confirmReset(context, state),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade900, foregroundColor: const Color(0xFFF4E4BC)),
+                    child: Text('RESET GAME (WIPE ALL)', style: GoogleFonts.cinzel(fontWeight: FontWeight.w900)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Close', style: GoogleFonts.cinzel(color: const Color(0xFF5D4037), fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmReset(BuildContext context, GameState state) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFFF4E4BC),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: Color(0xFF5D4037), width: 4)),
-        title: Text('Developer Tools', style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, color: textColor)),
-        content: Text('Realm administration options.', style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: textColor, fontSize: 18)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Colors.red, width: 4)),
+        title: Text('⚠ SERIOUS WARNING', style: GoogleFonts.cinzel(color: Colors.red.shade900, fontWeight: FontWeight.w900)),
+        content: Text(
+          'This will permanently WIPE your day progress, cash, bank balance, BNPL debts, and inventory. This action CANNOT be undone.',
+          style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10), fontSize: 16),
+        ),
         actions: [
-          _disasterButton('Add 1000 Cash', Colors.green.shade900, () => state.devAddMoney(1000)),
-          _disasterButton('Remove All Plants', Colors.red.shade900, () => state.devRemoveAllPlants()),
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: GoogleFonts.cinzel(color: Colors.grey.shade700, fontWeight: FontWeight.bold))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('ABORT', style: GoogleFonts.cinzel(color: const Color(0xFF5D4037), fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              state.devResetGame();
+              Navigator.pop(ctx); // Close warning
+              Navigator.pop(context); // Close Dev Tools
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade900, foregroundColor: const Color(0xFFF4E4BC)),
+            child: Text('YES, WIPE EVERYTHING', style: GoogleFonts.cinzel(fontWeight: FontWeight.w900)),
+          ),
         ],
       ),
     );

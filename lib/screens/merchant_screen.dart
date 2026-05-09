@@ -224,25 +224,21 @@ class _BnplPlanCard extends StatelessWidget {
   Widget build(BuildContext context) {
     const textColor = Color(0xFF2D1B10);
     final isOverdue = plan.isOverdueAtGameDay(state.currentDay);
+    final isPaidThisMonth = plan.nextDueDay != null && plan.nextDueDay! > state.currentDay;
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isOverdue ? const Color(0xFFFFEBEE) : const Color(0xFFFDF5E6).withOpacity(0.5), // Soft parchment/cream
+        color: isOverdue ? const Color(0xFFFFEBEE) : const Color(0xFFFDF5E6).withOpacity(0.5),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isOverdue ? const Color(0xFFB71C1C) : const Color(0xFF8D6E63),
           width: 2,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -250,17 +246,38 @@ class _BnplPlanCard extends StatelessWidget {
               Text(plan.itemName, 
                    style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, fontSize: 16, color: textColor)),
               Text('${CurrencyUtil.format(plan.monthlyAmount, player.country)}/mo', 
-                   style: GoogleFonts.almendra(fontWeight: FontWeight.w900, fontSize: 16, color: const Color(0xFFBF360C))), // Deep orange
+                   style: GoogleFonts.almendra(fontWeight: FontWeight.w900, fontSize: 16, color: const Color(0xFFBF360C))),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(
+                isPaidThisMonth ? Icons.check_circle : Icons.error_outline,
+                size: 14,
+                color: isPaidThisMonth ? Colors.green.shade900 : Colors.red.shade900,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                isPaidThisMonth ? 'Monthly Progress: PAID' : 'Monthly Progress: DUE',
+                style: GoogleFonts.almendra(
+                  fontSize: 12, 
+                  fontWeight: FontWeight.bold, 
+                  color: isPaidThisMonth ? Colors.green.shade900 : Colors.red.shade900
+                ),
+              ),
+              if (!isPaidThisMonth)
+                Text(' (Due Day ${plan.nextDueDay})', style: GoogleFonts.almendra(fontSize: 12, color: textColor)),
+            ],
+          ),
+          const Divider(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('${plan.paidInstallments}/${plan.installments} installments paid', 
                    style: GoogleFonts.almendra(fontSize: 14, fontWeight: FontWeight.bold, color: textColor)),
               ElevatedButton(
-                onPressed: () => state.repayBnplPlan(plan.id, PaymentMethod.cash),
+                onPressed: () => _confirmRepayment(context, textColor),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF5D4037),
                   foregroundColor: const Color(0xFFF4E4BC),
@@ -270,6 +287,46 @@ class _BnplPlanCard extends StatelessWidget {
                 child: Text('Repay Cash', style: GoogleFonts.cinzel(fontSize: 12, fontWeight: FontWeight.bold)),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmRepayment(BuildContext context, Color textColor) {
+    if (player.cashBalance < plan.monthlyAmount) {
+      _showParchmentSnackBar(context, 'Insufficient cash for installment.');
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFFF4E4BC),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFF5D4037), width: 3),
+        ),
+        title: Text('Confirm Repayment', style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, color: textColor)),
+        content: Text(
+          'Pay ${CurrencyUtil.format(plan.monthlyAmount, player.country)} for ${plan.itemName} installment?',
+          style: GoogleFonts.almendra(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.cinzel(color: const Color(0xFF5D4037), fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              state.repayBnplPlan(plan.id, PaymentMethod.cash);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green.shade900,
+              foregroundColor: const Color(0xFFF4E4BC),
+            ),
+            child: Text('Confirm', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -400,67 +457,7 @@ class _EquipmentCard extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () async {
-                    final confirm = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        backgroundColor: const Color(0xFFF4E4BC),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFF5D4037), width: 2)),
-                        title: Text('BNPL Purchase',
-                          style: GoogleFonts.cinzel(color: const Color(0xFF2D1B10), fontWeight: FontWeight.w900, fontSize: 22)),
-                        content: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${equipment.name} — ${CurrencyUtil.format(equipment.price, player.country)}',
-                              style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10), fontSize: 16),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Pay in 3 installments of ${CurrencyUtil.format(equipment.price / 3, player.country)}/month.',
-                              style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10), fontSize: 14),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Miss a payment and you\'ll be charged late fees!',
-                              style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: const Color(0xFFBF360C), fontSize: 14, fontStyle: FontStyle.italic),
-                            ),
-                          ],
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: Text('Cancel', style: GoogleFonts.cinzel(color: const Color(0xFF5D4037), fontWeight: FontWeight.bold)),
-                          ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF5D4037),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                            onPressed: () => Navigator.pop(ctx, true),
-                            child: Text('CONFIRM BNPL', style: GoogleFonts.cinzel(color: const Color(0xFFF4E4BC), fontWeight: FontWeight.bold)),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (confirm == true) {
-                      await FinancialAdvisor.warnBnpl(context, player, state.bnplPlans.length);
-                      final success = await state.purchaseWithBnpl(
-                        equipment.name,
-                        equipment.price,
-                        3, // 3 installments
-                      );
-                      if (success && context.mounted) {
-                        DialogPopup.show(
-                          context,
-                          title: '📦 BNPL Activated',
-                          message: '${equipment.name} unlocked! First payment due in ${kGameDaysPerMonth} game days.',
-                          icon: Icons.check_circle,
-                        );
-                      }
-                    }
-                  },
+                  onPressed: () => _showEquipmentBnplDialog(context, equipment, state, player),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Color(0xFF5D4037), width: 2),
                     foregroundColor: const Color(0xFF2D1B10),
@@ -560,11 +557,29 @@ class _MarketSellSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const textColor = Color(0xFF2D1B10);
-    final items = player.inventory.entries.where((e) => e.value > 0).toList();
-    if (items.isEmpty) return const SizedBox();
+    // Filter inventory to only show harvested crops (keys without '_seed')
+    final items = player.inventory.entries
+        .where((e) => e.value > 0 && !e.key.endsWith('_seed'))
+        .toList();
+        
+    if (items.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 40),
+          child: Text('No harvested crops to sell.', 
+              style: GoogleFonts.almendra(fontSize: 18, color: textColor.withOpacity(0.5))),
+        ),
+      );
+    }
 
     return Column(
       children: items.map((entry) {
+        // Find config to get sell price
+        final cropType = CropType.values.firstWhere((t) => t.name == entry.key);
+        final config = kCropConfig[cropType]!;
+        final sellPrice = config['sellPrice'] as double;
+        final totalValue = sellPrice * entry.value;
+
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(16),
@@ -573,19 +588,42 @@ class _MarketSellSection extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: const Color(0xFF5D4037).withOpacity(0.3), width: 2),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Column(
             children: [
-              Text(entry.key.toUpperCase(), 
-                   style: GoogleFonts.cinzel(fontSize: 16, fontWeight: FontWeight.w900, color: textColor)),
-              ElevatedButton(
-                onPressed: () => state.sellInventoryCrop(entry.key),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade900,
-                  foregroundColor: const Color(0xFFF4E4BC),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(entry.key.toUpperCase(), 
+                           style: GoogleFonts.cinzel(fontSize: 16, fontWeight: FontWeight.w900, color: textColor)),
+                      Text('Quantity: ${entry.value}', style: GoogleFonts.almendra(fontSize: 14, color: textColor)),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(CurrencyUtil.format(totalValue, player.country), 
+                           style: GoogleFonts.cinzel(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.green.shade900)),
+                      Text('${CurrencyUtil.format(sellPrice, player.country)} per unit', style: GoogleFonts.almendra(fontSize: 12, color: textColor.withOpacity(0.7))),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => state.sellInventoryCrop(entry.key),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade900,
+                    foregroundColor: const Color(0xFFF4E4BC),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: Text('SELL ALL FOR ${CurrencyUtil.format(totalValue, player.country)}', 
+                             style: GoogleFonts.cinzel(fontSize: 14, fontWeight: FontWeight.w900)),
                 ),
-                child: Text('SELL ALL', style: GoogleFonts.cinzel(fontSize: 14, fontWeight: FontWeight.w900)),
               ),
             ],
           ),
@@ -593,6 +631,54 @@ class _MarketSellSection extends StatelessWidget {
       }).toList(),
     );
   }
+}
+
+// Helper to show equipment BNPL dialog
+void _showEquipmentBnplDialog(BuildContext context, _Equipment equipment, GameState state, Player player) {
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: const Color(0xFFF4E4BC),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFF5D4037), width: 2)),
+      title: Text('BNPL: ${equipment.name}', style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, color: const Color(0xFF2D1B10))),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _BnplOptionTile(
+            months: 3,
+            amount: equipment.price,
+            feePercent: 0,
+            onSelect: () async {
+              final ok = await state.purchaseWithBnpl(equipment.name, equipment.price, 3);
+              if (context.mounted) {
+                Navigator.pop(ctx);
+                if (!ok) {
+                  _showParchmentSnackBar(context, 'Insufficient funds for the first installment.');
+                }
+              }
+            },
+            country: player.country,
+          ),
+          const SizedBox(height: 12),
+          _BnplOptionTile(
+            months: 6,
+            amount: equipment.price,
+            feePercent: 0.05,
+            onSelect: () async {
+              final ok = await state.purchaseWithBnpl(equipment.name, equipment.price, 6);
+              if (context.mounted) {
+                Navigator.pop(ctx);
+                if (!ok) {
+                  _showParchmentSnackBar(context, 'Insufficient funds for the first installment.');
+                }
+              }
+            },
+            country: player.country,
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 
@@ -648,56 +734,221 @@ class _SeedShopSection extends StatelessWidget {
   }
 }
 
-class _SeedCard extends StatelessWidget {
+class _SeedCard extends StatefulWidget {
   final CropType type;
   final Player player;
   final GameState state;
   const _SeedCard({required this.type, required this.player, required this.state});
 
   @override
+  State<_SeedCard> createState() => _SeedCardState();
+}
+
+class _SeedCardState extends State<_SeedCard> {
+  int _quantity = 1;
+
+  @override
   Widget build(BuildContext context) {
-    final config = kCropConfig[type]!;
+    final config = kCropConfig[widget.type]!;
     final price = config['seedCost'] as double;
-    final name = config['name'] as String; // Use configured name (Wheat, Paddy, Corn)
-    final seedKey = '${type.name}_seed';
-    final owned = player.inventory[seedKey] ?? 0;
+    final name = config['name'] as String;
+    final seedKey = '${widget.type.name}_seed';
+    final owned = widget.player.inventory[seedKey] ?? 0;
     
-    // Map CropType to asset name
     String assetName;
-    switch(type) {
+    switch(widget.type) {
       case CropType.wheat: assetName = 'wheat'; break;
       case CropType.rice: assetName = 'rice'; break;
       case CropType.corn: assetName = 'corn'; break;
     }
 
+    final totalCost = price * _quantity;
+
     return Container(
-      width: 110,
-      padding: const EdgeInsets.all(8),
+      width: 200, // Wider to accommodate slider
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.3),
+        color: const Color(0xFFFDF5E6).withOpacity(0.5),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFF5D4037).withOpacity(0.4), width: 2),
       ),
       child: Column(
         children: [
-          Image.asset('assets/images/crops/${assetName}_3.png', width: 32, height: 32, filterQuality: FilterQuality.none),
-          const SizedBox(height: 4),
-          Text(name, style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, fontSize: 14, color: const Color(0xFF2D1B10))),
-          const SizedBox(height: 2),
-          Text(CurrencyUtil.format(price, player.country), style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
-          Text('Own: $owned', style: GoogleFonts.almendra(fontSize: 12, color: const Color(0xFF2D1B10))),
+          Row(
+            children: [
+              Image.asset('assets/images/crops/${assetName}_3.png', width: 32, height: 32, filterQuality: FilterQuality.none),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: GoogleFonts.cinzel(fontWeight: FontWeight.w900, fontSize: 16, color: const Color(0xFF2D1B10))),
+                    Text('Own: $owned', style: GoogleFonts.almendra(fontSize: 12, color: const Color(0xFF2D1B10))),
+                  ],
+                ),
+              ),
+              Text(CurrencyUtil.format(price, widget.player.country), style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
+            ],
+          ),
+          const Divider(height: 16),
+          Row(
+            children: [
+              Text('Qty: ', style: GoogleFonts.almendra(fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10))),
+              Expanded(
+                child: Slider(
+                  value: _quantity.toDouble(),
+                  min: 1,
+                  max: 99,
+                  divisions: 98,
+                  activeColor: const Color(0xFF5D4037),
+                  inactiveColor: const Color(0xFF5D4037).withOpacity(0.2),
+                  onChanged: (val) => setState(() => _quantity = val.toInt()),
+                ),
+              ),
+              Text('$_quantity', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10))),
+            ],
+          ),
+          Text('Total: ${CurrencyUtil.format(totalCost, widget.player.country)}', 
+               style: GoogleFonts.cinzel(fontSize: 14, fontWeight: FontWeight.w900, color: const Color(0xFF2D1B10))),
           const SizedBox(height: 8),
-          ElevatedButton(
-            onPressed: () => state.buySeeds(type, 1),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF5D4037),
-              foregroundColor: const Color(0xFFF4E4BC),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              minimumSize: const Size(60, 30),
-            ),
-            child: Text('BUY 1', style: GoogleFonts.cinzel(fontSize: 10, fontWeight: FontWeight.w900)),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: (widget.player.cashBalance + widget.player.bankBalance >= totalCost)
+                      ? () => widget.state.buySeeds(widget.type, _quantity)
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF5D4037),
+                    foregroundColor: const Color(0xFFF4E4BC),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  child: Text('CASH', style: GoogleFonts.cinzel(fontSize: 10, fontWeight: FontWeight.w900)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => _showSeedBnplDialog(context, name, totalCost),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFF5D4037), width: 1.5),
+                    foregroundColor: const Color(0xFF2D1B10),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  child: Text('BNPL', style: GoogleFonts.cinzel(fontSize: 10, fontWeight: FontWeight.w900)),
+                ),
+              ),
+            ],
           ),
         ],
+      ),
+    );
+  }
+
+  void _showSeedBnplDialog(BuildContext context, String name, double amount) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFFF4E4BC),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFF5D4037), width: 2)),
+        title: Text('BNPL: $name', style: GoogleFonts.cinzel(fontWeight: FontWeight.w900)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _BnplOptionTile(
+              months: 3,
+              amount: amount,
+              feePercent: 0,
+              onSelect: () async {
+                final ok = await widget.state.buySeeds(widget.type, _quantity, useBnpl: true, installments: 3);
+                if (context.mounted) {
+                  Navigator.pop(ctx);
+                  if (!ok) {
+                    _showParchmentSnackBar(context, 'Insufficient funds for the first installment.');
+                  }
+                }
+              },
+              country: widget.player.country,
+            ),
+            const SizedBox(height: 12),
+            _BnplOptionTile(
+              months: 6,
+              amount: amount,
+              feePercent: 0.05,
+              onSelect: () async {
+                final ok = await widget.state.buySeeds(widget.type, _quantity, useBnpl: true, installments: 6);
+                if (context.mounted) {
+                  Navigator.pop(ctx);
+                  if (!ok) {
+                    _showParchmentSnackBar(context, 'Insufficient funds for the first installment.');
+                  }
+                }
+              },
+              country: widget.player.country,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+void _showParchmentSnackBar(BuildContext context, String message) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      backgroundColor: const Color(0xFFF4E4BC),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: const BorderSide(color: Color(0xFF5D4037), width: 2),
+      ),
+      content: Text(
+        message,
+        style: GoogleFonts.almendra(
+          color: const Color(0xFF2D1B10),
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    ),
+  );
+}
+
+class _BnplOptionTile extends StatelessWidget {
+  final int months;
+  final double amount;
+  final double feePercent;
+  final VoidCallback onSelect;
+  final String country;
+
+  const _BnplOptionTile({
+    required this.months,
+    required this.amount,
+    required this.feePercent,
+    required this.onSelect,
+    required this.country,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final total = amount * (1 + feePercent);
+    final monthly = total / months;
+    return InkWell(
+      onTap: onSelect,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFF5D4037)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Text('$months Months Plan', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10))),
+            Text('${CurrencyUtil.format(monthly, country)} / month', style: GoogleFonts.almendra(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF2D1B10))),
+            if (feePercent > 0)
+              Text('+${(feePercent * 100).toInt()}% Processing Fee', style: GoogleFonts.almendra(fontSize: 12, color: Colors.red.shade900)),
+            Text('Total: ${CurrencyUtil.format(total, country)}', style: GoogleFonts.almendra(fontSize: 12, color: const Color(0xFF2D1B10))),
+          ],
+        ),
       ),
     );
   }
