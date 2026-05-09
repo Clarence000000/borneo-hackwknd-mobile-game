@@ -18,6 +18,9 @@
 
 ---
 
+Deployment Link: https://borneo-hackhathon-richi.web.app/
+
+
 ## 🏆 BorneoHack 2026 Finals Submission
 
 **Richi Farm: Chronicles of Wealth** is the final evolution of our immersive fintech-educational game. Designed specifically for the ASEAN region, it bridges the gap between traditional farming simulations and modern financial services like BNPL, micro-loans, and crop insurance.
