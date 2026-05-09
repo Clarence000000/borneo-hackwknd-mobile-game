@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:flame_audio/flame_audio.dart';
 
 import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/services/gemini_service.dart';
