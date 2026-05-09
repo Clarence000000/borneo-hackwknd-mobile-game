@@ -81,6 +81,7 @@ flutter:
     - assets/tiles/
     - assets/audio/
     - assets/images/letter UI/UI assets pack 2/
+    - assets/images/handbook/
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see
