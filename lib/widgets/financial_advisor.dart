@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/models/player.dart';
 import 'package:farm_fintech/services/gemini_service.dart';
-import 'package:farm_fintech/widgets/dialog_popup.dart';
+import 'package:farm_fintech/widgets/oracle_chat_dialog.dart';
 
 /// Financial Advisor NPC that pops up with warnings.
 class FinancialAdvisor {
@@ -19,13 +19,18 @@ class FinancialAdvisor {
     final msg = await _gemini.getFinancialAdvice(player, 'Taking a loan that is ${(ratio*100).toInt()}% of my income, and my credit score is ${player.creditScore}. Is this smart?');
     if (!context.mounted) return;
 
-    return DialogPopup.show(
-      context,
-      title: '🤖 Ai Advisor',
-      message: msg,
-      icon: Icons.psychology,
-      iconColor: GameColors.uiAccent,
-      buttonText: 'I understand the risk',
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (_) => OracleChatDialog(
+        initialTrustScore: (player.creditScore / 850 * 100).toInt(),
+        initialWarning: msg,
+        isDangerous: true,
+        isWarningMode: true,
+        warningButtonText: 'I UNDERSTAND THE RISK',
+      ),
     );
   }
 
@@ -37,13 +42,18 @@ class FinancialAdvisor {
     final msg = await _gemini.getFinancialAdvice(player, 'I am taking out BNPL installment plan #${activePlans+1}. My cash is ${player.cashBalance}.');
     if (!context.mounted) return;
 
-    return DialogPopup.show(
-      context,
-      title: '🤖 Ai Advisor',
-      message: msg,
-      icon: Icons.psychology,
-      iconColor: GameColors.uiAccent,
-      buttonText: 'I\'ll be careful',
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (_) => OracleChatDialog(
+        initialTrustScore: (player.creditScore / 850 * 100).toInt(),
+        initialWarning: msg,
+        isDangerous: true,
+        isWarningMode: true,
+        warningButtonText: 'I\'LL BE CAREFUL',
+      ),
     );
   }
 
@@ -55,13 +65,18 @@ class FinancialAdvisor {
     final msg = await _gemini.getFinancialAdvice(player, 'I have $uninsuredCrops uninsured crops. The weather looks somewhat suspicious. Should I buy crop insurance?');
     if (!context.mounted) return;
 
-    return DialogPopup.show(
-      context,
-      title: '🤖 Ai Advisor',
-      message: msg,
-      icon: Icons.psychology,
-      iconColor: GameColors.uiAccent,
-      buttonText: 'Good idea!',
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (_) => OracleChatDialog(
+        initialTrustScore: (player.creditScore / 850 * 100).toInt(),
+        initialWarning: msg,
+        isDangerous: false,
+        isWarningMode: true,
+        warningButtonText: 'GOOD IDEA!',
+      ),
     );
   }
 }

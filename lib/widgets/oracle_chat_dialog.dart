@@ -16,12 +16,16 @@ class OracleChatDialog extends StatefulWidget {
   final int initialTrustScore;
   final String initialWarning;
   final bool isDangerous;
+  final bool isWarningMode;
+  final String? warningButtonText;
 
   const OracleChatDialog({
     super.key,
     required this.initialTrustScore,
     required this.initialWarning,
     required this.isDangerous,
+    this.isWarningMode = false,
+    this.warningButtonText,
   });
 
   @override
@@ -527,6 +531,45 @@ class _OracleChatDialogState extends State<OracleChatDialog>
   }
 
   Widget _buildInputArea() {
+    if (widget.isWarningMode) {
+      return Container(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 12,
+          bottom: MediaQuery.of(context).padding.bottom + 20,
+        ),
+        decoration: const BoxDecoration(
+          color: Color(0xFF0D0520),
+        ),
+        child: SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8E44AD),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: Color(0xFFE0C3FC), width: 1.5),
+              ),
+              elevation: 8,
+              shadowColor: const Color(0xFF9B59B6).withValues(alpha: 0.6),
+            ),
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              widget.warningButtonText ?? 'I UNDERSTAND',
+              style: GoogleFonts.cinzel(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.5,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Container(
       padding: EdgeInsets.only(
         left: 16,
