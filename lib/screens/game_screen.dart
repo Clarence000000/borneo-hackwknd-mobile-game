@@ -20,6 +20,7 @@ import 'package:farm_fintech/utils/currency_util.dart';
 import 'package:farm_fintech/services/seed_service.dart';
 import 'package:farm_fintech/screens/bank_screen.dart';
 import 'package:farm_fintech/screens/house_screen.dart';
+import 'package:farm_fintech/screens/forest_screen.dart';
 import 'package:farm_fintech/screens/merchant_screen.dart';
 import 'package:farm_fintech/widgets/shady_dialogue_panel.dart';
 import 'package:farm_fintech/widgets/lyra_dialog_box.dart';
@@ -84,6 +85,14 @@ class _GameScreenState extends State<GameScreen> {
             pageBuilder: (dialogCtx, anim1, anim2) => const MerchantScreen(),
           );
       }
+    };
+
+    _game.onForestEntry = () {
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ForestScreen()),
+      );
     };
 
     // Lyra: show dialog when tapped on the map

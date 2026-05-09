@@ -65,6 +65,12 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
   VoidCallback? onLyraTapped;
   VoidCallback? onLyraQuestTapped;
 
+  /// Callback when the player walks into the ForestEntry zone on level1.tmx.
+  VoidCallback? onForestEntry;
+
+  Rect _forestEntryRect = Rect.zero;
+  bool _forestEntryTriggered = false;
+
   /// Lyra NPC component reference.
   LyraNpcComponent? _lyraNpc;
   LyraNpcComponent? get lyraNpc => _lyraNpc;
@@ -207,6 +213,23 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
       _buildings.add(house);
       world.add(house);
 
+      // Parse ForestEntry zone from object layers
+      for (final layer in _mapComponent!.tileMap.map.layers) {
+        if (layer is ObjectGroup && layer.name == 'ForestEntry') {
+          for (final obj in layer.objects) {
+            _forestEntryRect = Rect.fromLTWH(
+              (obj.x as num).toDouble(),
+              (obj.y as num).toDouble(),
+              (obj.width as num?)?.toDouble() ?? 32.0,
+              (obj.height as num?)?.toDouble() ?? 32.0,
+            );
+            developer.log('ForestEntry zone: $_forestEntryRect', name: 'RichiFarmGame');
+            break;
+          }
+          break;
+        }
+      }
+
       // ── Lyra the Oracle NPC ────────────────────────────────────
       // Place her to the right of the merchant building
       _lyraNpc = LyraNpcComponent(gridCol: 12, gridRow: 3);
@@ -243,6 +266,21 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
     // Guard: if onLoad failed, _mapComponent will be null
     if (_mapComponent == null) return;
     _updateCamera();
+    _checkForestEntry();
+  }
+
+  void _checkForestEntry() {
+    final player = playerComponent;
+    if (player == null || _forestEntryRect == Rect.zero) return;
+    final inZone = _forestEntryRect.contains(
+      Offset(player.position.x, player.position.y),
+    );
+    if (inZone && !_forestEntryTriggered) {
+      _forestEntryTriggered = true;
+      onForestEntry?.call();
+    } else if (!inZone && _forestEntryTriggered) {
+      _forestEntryTriggered = false;
+    }
   }
 
   void _updateCamera() {

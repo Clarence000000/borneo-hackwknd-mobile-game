@@ -1,6 +1,6 @@
 import 'package:farm_fintech/config/constants.dart';
 
-enum QuestType { harvest, cash }
+enum QuestType { harvest, cash, delivery, urgent, location }
 enum QuestStatus { active, completed, failed }
 
 class Quest {
@@ -14,6 +14,7 @@ class Quest {
   final int durationDays;
   final double cost; // Payment to accept the quest
   final double reward; // Cash reward on completion
+  final String? targetLocation; // e.g. 'wild_forest' for location quests
   QuestStatus status;
   double currentProgress;
 
@@ -24,6 +25,7 @@ class Quest {
     required this.type,
     required this.goalAmount,
     this.targetCrop,
+    this.targetLocation,
     required this.startDay,
     required this.durationDays,
     required this.cost,
@@ -42,6 +44,7 @@ class Quest {
     'type': type.name,
     'goalAmount': goalAmount,
     'targetCrop': targetCrop?.name,
+    'targetLocation': targetLocation,
     'startDay': startDay,
     'durationDays': durationDays,
     'cost': cost,
@@ -57,6 +60,7 @@ class Quest {
     type: QuestType.values.byName(map['type'] as String? ?? 'harvest'),
     goalAmount: (map['goalAmount'] as num?)?.toDouble() ?? 0.0,
     targetCrop: map['targetCrop'] != null ? CropType.values.byName(map['targetCrop'] as String) : null,
+    targetLocation: map['targetLocation'] as String?,
     startDay: map['startDay'] as int? ?? 1,
     durationDays: map['durationDays'] as int? ?? 3,
     cost: (map['cost'] as num?)?.toDouble() ?? 100.0,

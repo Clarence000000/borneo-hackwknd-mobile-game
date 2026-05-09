@@ -216,26 +216,62 @@ Farmer ${player.displayName} now asks: "$userMessage"
   }
 
   /// Generate a new logically sound quest for the player.
+  /// Pass [disasterContext] for an urgent market demand quest.
+  /// Pass [locationContext] for a location exploration quest.
   Future<Quest> generateQuest({
     required Player player,
     required int currentDay,
     required int activeBnplCount,
+    String? disasterContext,
+    String? locationContext,
   }) async {
     if (!_initialized) {
-      // Fallback quest
+      if (locationContext != null) {
+        return Quest(
+          id: 'q-${DateTime.now().millisecondsSinceEpoch}',
+          title: 'Forest Expedition',
+          description: 'The Oracle of the Wild Forest awaits you. Visit the forest and speak with her.',
+          type: QuestType.location,
+          goalAmount: 1,
+          targetLocation: 'wild_forest',
+          startDay: currentDay,
+          durationDays: 3,
+          cost: 50,
+          reward: 300,
+        );
+      }
       return Quest(
         id: 'q-${DateTime.now().millisecondsSinceEpoch}',
-        title: 'Simple Harvest',
-        description: 'Harvest 5 Wheat to prove your basic farming skills.',
-        type: QuestType.harvest,
-        goalAmount: 5,
-        targetCrop: CropType.wheat,
+        title: disasterContext != null ? 'Emergency Delivery' : 'Simple Harvest',
+        description: disasterContext != null
+            ? '$disasterContext Deliver 10 crops urgently!'
+            : 'Harvest 5 Wheat to prove your basic farming skills.',
+        type: disasterContext != null ? QuestType.urgent : QuestType.harvest,
+        goalAmount: disasterContext != null ? 10 : 5,
+        targetCrop: disasterContext != null ? CropType.rice : CropType.wheat,
         startDay: currentDay,
-        durationDays: 3,
+        durationDays: disasterContext != null ? 1 : 3,
         cost: 50,
-        reward: 200,
+        reward: disasterContext != null ? 150 : 200,
       );
     }
+
+    final marketEvent = disasterContext != null
+        ? '''
+MARKET EVENT: $disasterContext
+Generate an URGENT market demand quest. Use type "urgent" or "delivery".
+Set durationDays to 1 or 2 (half the normal window).
+Set reward to exactly 3 times the cost.
+'''
+        : '';
+
+    final locationEvent = locationContext != null
+        ? '''
+LOCATION EVENT: $locationContext
+Generate a quest with type "location" and targetLocation "wild_forest".
+Set goalAmount to 1. Set durationDays to 3.
+'''
+        : '';
 
     final prompt = '''
 You are Lyra, a literature student and financial advisor. Generate a CHALLENGING but FAIR quest for this farmer.
@@ -245,24 +281,24 @@ Farmer: ${player.displayName}
 Day: $currentDay
 Cash: ${player.cashBalance}
 Credit: ${player.creditScore}
-
+$marketEvent$locationEvent
 Output ONLY this exact JSON format:
 {
   "title": "Short catchy title",
   "description": "Short explanation of the challenge",
-  "type": "harvest" OR "cash",
+  "type": "harvest" OR "cash" OR "delivery" OR "urgent" OR "location",
   "goalAmount": number,
-  "targetCrop": "wheat" OR "rice" OR "corn" (null if type is cash),
-  "durationDays": number (2-5),
+  "targetCrop": "wheat" OR "rice" OR "corn" (null if type is cash or location),
+  "targetLocation": "wild_forest" (only if type is location, otherwise null),
+  "durationDays": number (2-5, or 1-2 if urgent),
   "cost": number (payment to start),
-  "reward": number (2x to 4x of cost)
+  "reward": number (2x to 4x of cost, or exactly 3x if urgent/delivery)
 }
 ''';
 
     try {
       final response = await _model.generateContent([Content.text(prompt)]);
       final text = response.text ?? '';
-      // Simple extraction of JSON between curly braces
       final jsonStart = text.indexOf('{');
       final jsonEnd = text.lastIndexOf('}') + 1;
       if (jsonStart >= 0 && jsonEnd > jsonStart) {
@@ -273,9 +309,10 @@ Output ONLY this exact JSON format:
             id: 'q-${DateTime.now().millisecondsSinceEpoch}',
             title: map['title'] ?? 'Challenge',
             description: map['description'] ?? '',
-            type: map['type'] == 'cash' ? QuestType.cash : QuestType.harvest,
+            type: _parseQuestType(map['type']),
             goalAmount: (map['goalAmount'] as num?)?.toDouble() ?? 5.0,
             targetCrop: map['targetCrop'] != null ? _parseCropType(map['targetCrop']) : null,
+            targetLocation: map['targetLocation'] as String?,
             startDay: currentDay,
             durationDays: (map['durationDays'] as num?)?.toInt() ?? 3,
             cost: (map['cost'] as num?)?.toDouble() ?? 100.0,
@@ -308,6 +345,16 @@ Output ONLY this exact JSON format:
     } catch (e) {
       developer.log('JSON Parse Error: $e', name: 'GeminiService');
       return null;
+    }
+  }
+
+  QuestType _parseQuestType(dynamic raw) {
+    switch ((raw as String?)?.toLowerCase()) {
+      case 'cash': return QuestType.cash;
+      case 'delivery': return QuestType.delivery;
+      case 'urgent': return QuestType.urgent;
+      case 'location': return QuestType.location;
+      default: return QuestType.harvest;
     }
   }
 
