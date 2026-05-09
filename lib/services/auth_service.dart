@@ -48,8 +48,8 @@ class AuthService {
       }
     } catch (e) {
       debugPrint("Registration error: $e");
+      rethrow;
     }
-    return null;
   }
 
   /// Sign into existing account, then fetch Player profile from Firestore
@@ -64,9 +64,9 @@ class AuthService {
         return await _firestore.getPlayer(credential.user!.uid);
       }
     } catch (e) {
-      debugPrint("Sign in error: $e");
+      debugPrint("Login error: $e");
+      rethrow;
     }
-    return null;
   }
 
   /// Sign out

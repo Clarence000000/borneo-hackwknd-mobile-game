@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:farm_fintech/config/theme.dart';
 import 'package:farm_fintech/models/player.dart';
@@ -71,20 +72,30 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         final player = await _authService.register(email, pass, name);
         if (player != null && mounted) {
            _proceedToGame(player);
-        } else if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Registration Failed'))
-           );
         }
       } else {
         final player = await _authService.signIn(email, pass);
         if (player != null && mounted) {
            _proceedToGame(player);
-        } else if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Login Failed - Check credentials'))
-           );
         }
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+         ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(e.message ?? 'Authentication Failed'),
+              backgroundColor: Colors.redAccent,
+            )
+         );
+      }
+    } catch (e) {
+      if (mounted) {
+         ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('An error occurred: $e'),
+              backgroundColor: Colors.redAccent,
+            )
+         );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);

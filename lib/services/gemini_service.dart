@@ -33,12 +33,19 @@ class GeminiService {
   bool _initialized = false;
 
   GeminiService() {
-    final rawKey = dotenv.env['GEMINI_API_KEY'];
-    final apiKey = rawKey?.trim(); // Clean any trailing spaces/newlines
+    String? rawKey;
+    if (dotenv.isInitialized) {
+      rawKey = dotenv.env['GEMINI_API_KEY'];
+    }
     
-    developer.log('GeminiService Init. Key starts with: ${apiKey?.substring(0, 5)}...', name: 'GeminiService');
+    // Fallback key if dotenv is not loaded (production web)
+    rawKey ??= 'AIzaSyCn1tgxC0GlLfvhLhSkShC50rw9AFs4ajs';
     
-    if (apiKey != null && apiKey.isNotEmpty) {
+    final apiKey = rawKey.trim(); // Clean any trailing spaces/newlines
+    
+    developer.log('GeminiService Init. Key starts with: ${apiKey.substring(0, 5)}...', name: 'GeminiService');
+    
+    if (apiKey.isNotEmpty) {
       _model = GenerativeModel(
         model: 'gemini-2.5-flash',
         apiKey: apiKey,

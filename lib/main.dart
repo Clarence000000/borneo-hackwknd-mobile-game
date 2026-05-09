@@ -29,8 +29,13 @@ Future<void> main() async {
   // Hide system UI for immersive game experience
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
-  // Initialize Environment Variales
-  await dotenv.load(fileName: ".env.local");
+  // Initialize Environment Variables (may fail in production web — that's OK,
+  // firebase_options.dart has hardcoded fallbacks)
+  try {
+    await dotenv.load(fileName: ".env.local");
+  } catch (e) {
+    debugPrint('dotenv: .env.local not found, using hardcoded fallbacks');
+  }
 
   // Initialize Firebase using custom configuration from env variables
   await Firebase.initializeApp(

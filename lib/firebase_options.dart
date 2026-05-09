@@ -13,13 +13,20 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 /// ```
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
+    String? getEnv(String key) {
+      if (dotenv.isInitialized) {
+        return dotenv.env[key];
+      }
+      return null;
+    }
+
     return FirebaseOptions(
-      apiKey: dotenv.env['NEXT_PUBLIC_FIREBASE_API_KEY'] ?? '',
-      appId: dotenv.env['NEXT_PUBLIC_FIREBASE_APP_ID'] ?? '',
-      messagingSenderId: dotenv.env['NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID'] ?? '',
-      projectId: dotenv.env['NEXT_PUBLIC_FIREBASE_PROJECT_ID'] ?? '',
-      storageBucket: dotenv.env['NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET'],
-      authDomain: dotenv.env['NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN'],
+      apiKey: getEnv('NEXT_PUBLIC_FIREBASE_API_KEY') ?? 'AIzaSyCUvhADzPjS1hI-n0vgYOjUk8K-dcjG5Wc',
+      appId: getEnv('NEXT_PUBLIC_FIREBASE_APP_ID') ?? '1:1018683728162:web:7b0a0a927ca0b6a614057b',
+      messagingSenderId: getEnv('NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID') ?? '1018683728162',
+      projectId: getEnv('NEXT_PUBLIC_FIREBASE_PROJECT_ID') ?? 'borneo-hackhathon-richi',
+      storageBucket: getEnv('NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET') ?? 'borneo-hackhathon-richi.firebasestorage.app',
+      authDomain: getEnv('NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN') ?? 'borneo-hackhathon-richi.firebaseapp.com',
     );
   }
 }
