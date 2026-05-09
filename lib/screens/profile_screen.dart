@@ -11,6 +11,7 @@ import 'package:farm_fintech/providers/game_state.dart';
 import 'package:farm_fintech/services/firestore_service.dart';
 import 'package:farm_fintech/utils/currency_util.dart';
 import 'package:farm_fintech/widgets/book_ui.dart';
+import 'package:flame_audio/flame_audio.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -24,11 +25,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _transactionsUid;
   bool _isEditingName = false;
   late TextEditingController _nameController;
+  double _bgmVolume = 0.25;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController();
+    
+    // Initialize volume from existing player if possible
+    try {
+      if (FlameAudio.bgm.isPlaying) {
+        _bgmVolume = FlameAudio.bgm.audioPlayer.volume;
+      }
+    } catch (_) {}
   }
 
   @override
@@ -290,6 +299,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 48),
+              // BGM Volume Setting
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.music_note, color: textColor.withOpacity(0.7), size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'BGM Volume',
+                        style: GoogleFonts.cinzel(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: textColor.withOpacity(0.8),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Slider(
+                    value: _bgmVolume,
+                    min: 0.0,
+                    max: 1.0,
+                    activeColor: const Color(0xFFC5A021),
+                    inactiveColor: textColor.withOpacity(0.1),
+                    onChanged: (val) {
+                      setState(() => _bgmVolume = val);
+                      try {
+                        FlameAudio.bgm.audioPlayer.setVolume(val);
+                      } catch (_) {}
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(

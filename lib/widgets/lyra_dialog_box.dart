@@ -12,6 +12,7 @@ import 'package:farm_fintech/services/gemini_service.dart';
 import 'package:farm_fintech/models/quest.dart';
 import 'package:farm_fintech/models/financial/transaction.dart';
 import 'package:farm_fintech/config/constants.dart';
+import 'package:flame_audio/flame_audio.dart';
 
 /// Pokemon GBA-style visual novel dialog box.
 ///
@@ -70,6 +71,13 @@ class _LyraDialogBoxState extends State<LyraDialogBox>
   void initState() {
     super.initState();
     _trustScore = widget.initialTrustScore;
+    
+    // Play interaction sound
+    try {
+      FlameAudio.play('lyra_hello.wav', volume: 0.5);
+    } catch (e) {
+      developer.log('Failed to play Lyra sound: $e', name: 'LyraDialogBox');
+    }
 
     _slideController = AnimationController(
       vsync: this,

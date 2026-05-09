@@ -4,6 +4,7 @@ import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flame_tiled/flame_tiled.dart';
+import 'package:flame_audio/flame_audio.dart';
 import 'package:flutter/painting.dart';
 
 import 'package:farm_fintech/config/constants.dart';
@@ -85,6 +86,16 @@ class RichiFarmGame extends FlameGame with PanDetector, HasKeyboardHandlerCompon
   @override
   Future<void> onLoad() async {
     await super.onLoad();
+
+    // ── BGM ─────────────────────────────────────────────────────
+    try {
+      if (!FlameAudio.bgm.isPlaying) {
+        await FlameAudio.bgm.initialize();
+        await FlameAudio.bgm.play('bgm.mp3', volume: 0.25);
+      }
+    } catch (e) {
+      developer.log('BGM error: $e', name: 'RichiFarmGame');
+    }
 
     // Wire up game reference so GameState can call back.
     gameState.game = this;
